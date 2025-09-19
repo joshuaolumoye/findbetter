@@ -1,103 +1,76 @@
-import Image from "next/image";
+"use client";
+import React, { useState } from 'react';
+import PremiumCalculator from '../../components/PremiumCalculator';
+import ComparisonResult from '../../components/ComparisonResult';
+import FAQ from '../../components/faq';
+import Footer from '../../components/Footer';
+import Header from '../../components/Header';
+
+// Star Icon for Trustpilot rating
+const StarIcon = () => (
+    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+);
+
+// Green checkmark for Trustpilot section
+const GreenCheckIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="10" fill="#00B67A"/>
+        <path d="M6 10.5L8.66667 13L14 8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+
+const TrustpilotRating = () => (
+    <div className="inline-flex items-center justify-center space-x-4 bg-white p-3 pr-5 rounded-lg border border-green-200 shadow-sm mx-auto">
+        <div className="flex items-center space-x-2">
+            <GreenCheckIcon />
+            <div className="flex bg-green-500 p-1 rounded-sm">
+                <StarIcon />
+            </div>
+            <span className="font-bold text-gray-800">Trustpilot</span>
+        </div>
+        <div className="text-left">
+            <p className="font-semibold text-gray-700 text-sm">Hervorragend, das ist eines der Merkmale von uns!</p>
+            <p className="text-xs text-gray-500">einfach und unkompliziert mehr wollte ich nicht.</p>
+        </div>
+    </div>
+);
+
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [results, setResults] = useState([]);
+  const [debugInfo, setDebugInfo] = useState(null); // <-- Add this
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  return (
+    <main className="bg-white min-h-screen font-sans text-gray-900">
+      <Header />
+
+      <div className="container mx-auto px-6 py-12 sm:py-16 text-center">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Kein Bock mehr, es dir machen zu lassen?</h1>
+        <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">fang an es dir selber zu machen.</h2>
+        <p className="max-w-xl mx-auto text-gray-600 mb-8 text-base">
+          Der widerwilligste und letzte Krankenkassenvergleich der Schweiz.
+          Inklusive Kündigung in nur 4 Schritten.
+        </p>
+
+        <TrustpilotRating />
+        
+        <p className="text-xs text-gray-500 mt-3">4.9 Bewertungen auf Trustpilot</p>
+
+        <div className="mt-20 text-center">
+            <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 leading-tight">Über 1.000 Kunden machen es sich mittlerweile<br/>selber du noch etwa nicht?</h3>
+            <p className="text-lg text-gray-600">Probiere es aus!</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+
+      <div className="container mx-auto px-6 pb-20">
+        <div className="flex flex-col lg:flex-row justify-center items-start gap-8 relative">
+          <PremiumCalculator onResults={setResults} onDebugInfo={setDebugInfo} /> {/* <-- Pass handler */}
+          <ComparisonResult results={results} debugInfo={debugInfo} /> {/* <-- Pass debugInfo */}
+        </div>
+      </div>
+      <FAQ />
+      <Footer />
+    </main>
   );
 }
