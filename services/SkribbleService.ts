@@ -1,4 +1,4 @@
-// services/SkribbleService.ts - CORRECTED WITH MULTIPLE AUTH METHODS
+// services/SkribbleService.ts - FIXED to actually create signature requests
 import { PDFTemplateManager } from './PDFTemplateManager';
 
 interface SkribbleConfig {
@@ -18,12 +18,11 @@ export class SkribbleService {
   constructor(config: SkribbleConfig) {
     this.config = {
       ...config,
-      // Try multiple possible base URLs
-      baseUrl: config.baseUrl || this.getCorrectBaseUrl(config.environment)
+      baseUrl: config.baseUrl || 'https://api.skribble.de'
     };
     this.pdfManager = new PDFTemplateManager();
     
-    console.log('Initializing Skribble service with multiple auth methods:', {
+    console.log('Initializing Skribble service for signature requests:', {
       environment: this.config.environment,
       baseUrl: this.config.baseUrl,
       hasApiKey: !!this.config.apiKey,
@@ -32,381 +31,72 @@ export class SkribbleService {
   }
 
   /**
-   * Get the correct base URL based on environment
-   */
-  private getCorrectBaseUrl(environment: string): string {
-    // Try different possible base URLs
-    const possibleUrls = {
-      production: [
-        'https://api.skribble.de',
-        'https://api.skribble.de', 
-        'https://app.skribble.de/api',
-        'https://my.skribble.de/api'
-      ],
-      sandbox: [
-        'https://api-sandbox.skribble.de',
-        'https://api-demo.skribble.de',
-        'https://demo.skribble.de/api',
-        'https://api.skribble.de' // fallback to production
-      ]
-    };
-    
-    return possibleUrls[environment]?.[0] || 'https://api.skribble.de';
-  }
-
-  /**
-   * Try multiple authentication methods
+   * Username + API Key authentication
    */
   private async login(): Promise<string> {
-    console.log('Attempting Skribble authentication with multiple methods...');
+    console.log('Authenticating with Skribble...');
     
-    // Method 1: Try API Key directly in Authorization header (most common)
     try {
-      return await this.tryDirectApiKeyAuth();
-    } catch (error1) {
-      console.warn('Direct API key auth failed:', error1.message);
-    }
+      const authUrl = `${this.config.baseUrl}/v2/access/login`;
 
-    // Method 2: Try username + API key login
-    try {
-      return await this.tryUsernameApiKeyAuth();
-    } catch (error2) {
-      console.warn('Username+API key auth failed:', error2.message);
-    }
+      const response = await fetch(authUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'CompanioxApp/1.0'
+        },
+        body: JSON.stringify({
+          username: this.config.username,
+          "api-key": this.config.apiKey
+        }),
+      });
 
-    // Method 3: Try basic auth
-    try {
-      return await this.tryBasicAuth();
-    } catch (error3) {
-      console.warn('Basic auth failed:', error3.message);
-    }
+      if (response.ok) {
+        const token = await response.text();
 
-    throw new Error('All authentication methods failed. Please check your Skribble API credentials.');
-  }
-
-  /**
-   * Method 1: Direct API Key authentication
-   */
-  private async tryDirectApiKeyAuth(): Promise<string> {
-    console.log('Trying direct API key authentication...');
-    
-    // Some APIs use the API key directly as Bearer token
-    this.accessToken = this.config.apiKey;
-    this.tokenExpiry = Date.now() + (60 * 60 * 1000); // 1 hour
-    
-    // Test the token with a simple API call
-    const testUrl = `${this.config.baseUrl}/v2/account`;
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-        'Accept': 'application/json',
-        'User-Agent': 'CompanioxApp/1.0',
-        'Content-Type': 'application/json'
+        if (token && token.startsWith('ey')) {
+          this.accessToken = token.trim();
+          this.tokenExpiry = Date.now() + (18 * 60 * 1000);
+          console.log('✅ Skribble authentication successful');
+          return this.accessToken;
+        }
       }
-    });
 
-    if (response.ok) {
-      console.log('✅ Direct API key authentication successful');
-      return this.accessToken;
-    }
-
-    throw new Error(`Direct API key auth failed: ${response.status}`);
-  }
-
-  /**
-   * Method 2: Username + API Key authentication
-   */
-  private async tryUsernameApiKeyAuth(): Promise<string> {
-  console.log('Trying username + API key authentication...');
-
-  const authUrl = `${this.config.baseUrl}/v2/access/login`;
-
-  const response = await fetch(authUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'User-Agent': 'CompanioxApp/1.0'
-    },
-    body: JSON.stringify({
-      username: this.config.username,
-      "api-key": this.config.apiKey
-    }),
-  });
-
-  if (response.ok) {
-    // ✅ Read raw text instead of JSON
-    const token = await response.text();
-
-    if (token && token.startsWith('ey')) { // basic check for JWT
-      this.accessToken = token.trim();
-      this.tokenExpiry = Date.now() + (18 * 60 * 1000); // 18 minutes
-      console.log('✅ Username+API key authentication successful');
-      return this.accessToken;
+      const errorText = await response.text();
+      throw new Error(`Authentication failed: ${response.status} - ${errorText}`);
+      
+    } catch (error) {
+      console.error('Authentication error:', error);
+      throw new Error(`Failed to authenticate with Skribble: ${error.message}`);
     }
   }
 
-  const errorText = await response.text();
-  throw new Error(`Username+API key authentication failed: ${response.status} - ${errorText}`);
-}
-
-
-  /**
-   * Method 3: Basic Authentication
-   */
-  private async tryBasicAuth(): Promise<string> {
-    console.log('Trying basic authentication...');
-    
-    // Create basic auth string
-    const credentials = `${this.config.username}:${this.config.apiKey}`;
-    const encoded = Buffer.from(credentials).toString('base64');
-    
-    // Test basic auth
-    const testUrl = `${this.config.baseUrl}/v2/account`;
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${encoded}`,
-        'Accept': 'application/json',
-        'User-Agent': 'CompanioxApp/1.0'
-      }
-    });
-
-    if (response.ok) {
-      // For basic auth, we use the encoded credentials as the "token"
-      this.accessToken = encoded;
-      this.tokenExpiry = Date.now() + (60 * 60 * 1000); // 1 hour
-      console.log('✅ Basic authentication successful');
-      return this.accessToken;
-    }
-
-    throw new Error(`Basic auth failed: ${response.status}`);
-  }
-
-  /**
-   * Get valid access token
-   */
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
-
     return await this.login();
   }
 
-  /**
-   * Get appropriate Authorization header based on auth method used
-   */
-  private getAuthorizationHeader(token: string): string {
-    return `Bearer ${token}`;
-  }
-
-
-  /**
-   * Create signature request with flexible API structure
-   */
-  private async createSignatureRequest(params: {
-    title: string;
-    pdfBuffer: Buffer;
-    signerEmail: string;
-    documentType?: 'cancellation' | 'application';
-  }, accessToken: string): Promise<{
-    id: string;
-    title: string;
-    signingUrl?: string;
-    status: string;
-  }> {
-    try {
-      console.log('Creating Skribble signature request:', params.title);
-
-      // Try different signature request endpoints
-      const possibleEndpoints = [
-        '/v2/signature_requests',
-        '/v2/signature-requests',
-        '/api/v2/signature_requests',
-        '/signature_requests'
-      ];
-
-      // Try different request payload structures
-      const payloadVariations = [
-        // Structure 1: Standard
-        {
-          title: params.title,
-          message: `Bitte signieren Sie dieses Dokument für Ihren Krankenversicherungswechsel.`,
-          documents: [{
-            name: `${params.title}.pdf`,
-            content_base64: params.pdfBuffer.toString('base64'),
-            content_type: 'application/pdf'
-          }],
-          signers: [{
-            email: params.signerEmail,
-            language: 'de'
-          }]
-        },
-        // Structure 2: Alternative
-        {
-          title: params.title,
-          message: `Bitte signieren Sie dieses Dokument für Ihren Krankenversicherungswechsel.`,
-          files: [{
-            name: `${params.title}.pdf`,
-            content: params.pdfBuffer.toString('base64')
-          }],
-          signatures: [{
-            account_email: params.signerEmail
-          }]
-        },
-        // Structure 3: Simplified
-        {
-          title: params.title,
-          document_name: `${params.title}.pdf`,
-          document_content: params.pdfBuffer.toString('base64'),
-          signer_email: params.signerEmail
-        }
-      ];
-
-      for (const endpoint of possibleEndpoints) {
-        for (const payload of payloadVariations) {
-          try {
-            console.log(`Trying signature request: ${endpoint}`);
-            
-            const requestUrl = `${this.config.baseUrl}${endpoint}`;
-            
-            const response = await fetch(requestUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': this.getAuthorizationHeader(accessToken),
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'User-Agent': 'CompanioxApp/1.0'
-              },
-              body: JSON.stringify(payload),
-            });
-
-            console.log(`Signature request response (${endpoint}):`, response.status);
-
-            if (response.ok) {
-              const signatureRequest = await response.json();
-              console.log('✅ Signature request created successfully');
-              
-              return {
-                id: signatureRequest.signature_request_id || 
-                    signatureRequest.id || 
-                    `fallback_${Date.now()}`,
-                title: params.title,
-                signingUrl: signatureRequest.signing_url || 
-                          signatureRequest.sign_url ||
-                          signatureRequest.url,
-                status: signatureRequest.status || 'created'
-              };
-            } else if (response.status === 401 || response.status === 403) {
-              // Try re-authentication once
-              console.log('Re-authenticating due to 401/403...');
-              const newToken = await this.login();
-              
-              const retryResponse = await fetch(requestUrl, {
-                method: 'POST',
-                headers: {
-                  'Authorization': this.getAuthorizationHeader(newToken),
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-                  'User-Agent': 'CompanioxApp/1.0'
-                },
-                body: JSON.stringify(payload),
-              });
-
-              if (retryResponse.ok) {
-                const retryResult = await retryResponse.json();
-                console.log('✅ Signature request created after re-auth');
-                
-                return {
-                  id: retryResult.signature_request_id || retryResult.id || `fallback_${Date.now()}`,
-                  title: params.title,
-                  signingUrl: retryResult.signing_url || retryResult.sign_url,
-                  status: retryResult.status || 'created'
-                };
-              }
-            }
-
-            // Log error for debugging
-            const errorText = await response.text();
-            console.warn(`${endpoint} failed:`, response.status, errorText.substring(0, 200));
-            
-          } catch (requestError) {
-            console.warn(`Request error for ${endpoint}:`, requestError.message);
-            continue;
-          }
-        }
-      }
-
-      throw new Error('All signature request endpoints and payload structures failed');
-
-    } catch (error) {
-      console.error('Error creating Skribble signature request:', error);
-      throw new Error(`Signature request creation failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Test connection with comprehensive endpoint testing
-   */
   async testConnection(): Promise<boolean> {
     try {
-      console.log('Testing Skribble API connection...');
-      
+      console.log('Testing Skribble authentication...');
       const accessToken = await this.getAccessToken();
-      
-      // Try different test endpoints
-      const testEndpoints = [
-        '/v2/account',
-        '/v2/users/me',
-        '/api/v2/account',
-        '/account',
-        '/v2/signature_requests', // Just check if endpoint exists
-        '/health',
-        '/status'
-      ];
-
-      for (const endpoint of testEndpoints) {
-        try {
-          const testUrl = `${this.config.baseUrl}${endpoint}`;
-          
-          const response = await fetch(testUrl, {
-            method: 'GET',
-            headers: {
-              'Authorization': this.getAuthorizationHeader(accessToken),
-              'Accept': 'application/json',
-              'User-Agent': 'CompanioxApp/1.0'
-            }
-          });
-
-          if (response.ok) {
-            console.log(`✅ Connection test successful on ${endpoint}`);
-            return true;
-          } else {
-            console.log(`${endpoint} returned ${response.status}`);
-          }
-        } catch (endpointError) {
-          console.warn(`Test endpoint ${endpoint} error:`, endpointError.message);
-          continue;
-        }
-      }
-
-      console.warn('All test endpoints failed, but authentication seemed to work');
-      return true; // Authentication worked, assume connection is OK
-      
+      console.log('✅ Skribble authentication successful');
+      return true;
     } catch (error) {
-      console.error('Skribble API connection test error:', error);
+      console.error('Skribble authentication test failed:', error);
       return false;
     }
   }
 
   /**
-   * Process Swiss insurance switch (unchanged core logic)
+   * FIXED: Process Swiss insurance switch WITH Skribble signature requests
    */
   async processSwissInsuranceSwitch(userData: any, selectedInsurance: any): Promise<any> {
     try {
-      console.log('Starting Skribble Swiss KVG insurance switch process...');
+      console.log('Starting Swiss KVG insurance process with Skribble signature requests...');
       
       // Validate Swiss requirements
       this.validateSwissRequirements(userData, selectedInsurance);
@@ -414,70 +104,224 @@ export class SkribbleService {
       // Get access token
       const accessToken = await this.getAccessToken();
 
-      // Generate PDFs with timeout protection
+      // Generate PDFs
       console.log('Generating KVG documents...');
-      
       const [cancellationPdf, applicationPdf] = await Promise.all([
-        Promise.race([
-          this.pdfManager.generateCancellationPDF(userData, userData.currentInsurer),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Cancellation PDF generation timeout')), 30000)
-          )
-        ]),
-        Promise.race([
-          this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Application PDF generation timeout')), 30000)
-          )
-        ])
+        this.pdfManager.generateCancellationPDF(userData, userData.currentInsurer),
+        this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance)
       ]);
 
-      console.log('PDFs generated successfully, creating signature requests...');
+      console.log('PDFs generated successfully, creating Skribble signature requests...');
 
-      // Create signature requests sequentially
-      const cancellationRequest = await this.createSignatureRequest({
-        title: `KVG_Kuendigung_${new Date().getFullYear()}_${userData.firstName}_${userData.lastName}`,
-        pdfBuffer: cancellationPdf as Buffer,
-        signerEmail: userData.email,
-        documentType: 'cancellation'
-      }, accessToken);
+      // Create signature requests in Skribble
+      const [cancellationRequest, applicationRequest] = await Promise.all([
+        this.createSignatureRequest({
+          title: `KVG Kündigung ${new Date().getFullYear()} - ${userData.firstName} ${userData.lastName}`,
+          documentBuffer: cancellationPdf,
+          signer: {
+            email: userData.email,
+            firstName: userData.firstName,
+            lastName: userData.lastName
+          },
+          accessToken
+        }),
+        this.createSignatureRequest({
+          title: `Krankenversicherungsantrag ${selectedInsurance.insurer} - ${userData.firstName} ${userData.lastName}`,
+          documentBuffer: applicationPdf,
+          signer: {
+            email: userData.email,
+            firstName: userData.firstName,
+            lastName: userData.lastName
+          },
+          accessToken
+        })
+      ]);
 
-      console.log('Cancellation request created:', cancellationRequest.id);
+      console.log('Skribble signature requests created successfully');
 
-      // Small delay to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Generate session ID
+      const sessionId = `session_${Date.now()}`;
 
-      const applicationRequest = await this.createSignatureRequest({
-        title: `Krankenversicherungsantrag_${selectedInsurance.insurer}_${userData.firstName}_${userData.lastName}`,
-        pdfBuffer: applicationPdf as Buffer,
-        signerEmail: userData.email,
-        documentType: 'application'
-      }, accessToken);
-
-      console.log('Application request created:', applicationRequest.id);
-
-      // Use the first available signing URL
-      const signingUrl = cancellationRequest.signingUrl || 
-                        applicationRequest.signingUrl ||
-                        `${process.env.NEXT_PUBLIC_BASE_URL}/insurance/signing?session=${cancellationRequest.id}`;
-
-      console.log('Skribble Swiss KVG insurance switch completed successfully');
-
+      // Return the ACTUAL Skribble signing URL
       return {
-        redirectUrl: signingUrl,
-        cancellationDocumentId: cancellationRequest.id,
-        applicationDocumentId: applicationRequest.id,
-        sessionId: `batch_${Date.now()}`,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        redirectUrl: cancellationRequest.signingUrl, // ← REAL Skribble signing URL
+        cancellationDocumentId: cancellationRequest.documentId,
+        applicationDocumentId: applicationRequest.documentId,
+        sessionId: sessionId,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        mode: 'skribble_signing', // ← Indicates real Skribble mode
+        signingUrls: {
+          cancellation: cancellationRequest.signingUrl,
+          application: applicationRequest.signingUrl
+        }
       };
 
     } catch (error) {
-      console.error('Error processing Swiss insurance switch:', error);
+      console.error('Error processing Swiss insurance switch with Skribble:', error);
       throw new Error(`Failed to process KVG insurance switch: ${error.message}`);
     }
   }
 
-  // Keep existing validation methods
+  /**
+   * Create signature request in Skribble - FIXED for server-side Node.js
+   */
+  private async createSignatureRequest(params: {
+    title: string;
+    documentBuffer: Buffer;
+    signer: {
+      email: string;
+      firstName: string;
+      lastName: string;
+    };
+    accessToken: string;
+  }): Promise<{ documentId: string; signingUrl: string }> {
+    
+    console.log(`Creating Skribble signature request: ${params.title}`);
+    console.log('PDF Buffer size:', params.documentBuffer.length, 'bytes');
+
+    try {
+      // Step 1: Upload document using proper Node.js FormData
+      const uploadUrl = `${this.config.baseUrl}/v2/document`;
+      
+      // Import FormData for Node.js environment
+      const FormData = require('form-data');
+      const formData = new FormData();
+      
+      // Create a safe filename (remove special characters)
+      const safeTitle = params.title.replace(/[^a-zA-Z0-9\s\-_]/g, '').replace(/\s+/g, '_');
+      const filename = `${safeTitle}.pdf`;
+      
+      // Validate PDF buffer
+      if (!params.documentBuffer || params.documentBuffer.length < 100) {
+        throw new Error('Invalid or empty PDF buffer');
+      }
+      
+      // Check if it's actually a PDF
+      const pdfHeader = params.documentBuffer.slice(0, 4).toString();
+      if (!pdfHeader.startsWith('%PDF')) {
+        throw new Error('Buffer does not contain a valid PDF document');
+      }
+
+      formData.append('file', params.documentBuffer, {
+        filename: filename,
+        contentType: 'application/pdf'
+      });
+      formData.append('title', params.title);
+
+      console.log('Uploading to Skribble:', { 
+        url: uploadUrl, 
+        filename,
+        bufferSize: params.documentBuffer.length,
+        title: params.title 
+      });
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${params.accessToken}`,
+          'User-Agent': 'CompanioxApp/1.0',
+          ...formData.getHeaders() // This adds proper Content-Type for multipart/form-data
+        },
+        body: formData
+      });
+
+      console.log('Upload response status:', uploadResponse.status);
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('Upload error response:', errorText);
+        
+        // Handle specific Skribble errors
+        if (uploadResponse.status === 401) {
+          throw new Error('Skribble authentication failed - check API credentials');
+        } else if (uploadResponse.status === 413) {
+          throw new Error('PDF file too large for Skribble (max 25MB)');
+        } else if (uploadResponse.status === 422) {
+          throw new Error('Invalid PDF format or corrupted file');
+        } else if (uploadResponse.status === 500) {
+          throw new Error('Skribble server error - please try again in a few minutes');
+        }
+        
+        throw new Error(`Document upload failed: ${uploadResponse.status} - ${errorText}`);
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const documentId = uploadResult.id;
+
+      if (!documentId) {
+        throw new Error('No document ID returned from Skribble upload');
+      }
+
+      console.log(`✅ Document uploaded to Skribble: ${documentId}`);
+
+      // Step 2: Create signature request
+      const signatureUrl = `${this.config.baseUrl}/v2/signature-request`;
+
+      const signatureRequestData = {
+        document_id: documentId,
+        title: params.title,
+        message: 'Bitte unterschreiben Sie dieses wichtige KVG-Dokument.',
+        signature_type: 'qes', // Qualified Electronic Signature for Swiss legal compliance
+        signers: [
+          {
+            email: params.signer.email,
+            first_name: params.signer.firstName,
+            last_name: params.signer.lastName,
+            language: 'de'
+          }
+        ],
+        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/skribble/webhook`,
+        expire_days: 30
+      };
+
+      console.log('Creating signature request:', { 
+        documentId, 
+        signerEmail: params.signer.email,
+        title: params.title 
+      });
+
+      const signatureResponse = await fetch(signatureUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${params.accessToken}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'CompanioxApp/1.0'
+        },
+        body: JSON.stringify(signatureRequestData)
+      });
+
+      console.log('Signature request response status:', signatureResponse.status);
+
+      if (!signatureResponse.ok) {
+        const errorText = await signatureResponse.text();
+        console.error('Signature request error:', errorText);
+        throw new Error(`Signature request failed: ${signatureResponse.status} - ${errorText}`);
+      }
+
+      const signatureResult = await signatureResponse.json();
+
+      if (!signatureResult.signing_url) {
+        console.error('No signing URL in response:', signatureResult);
+        throw new Error('No signing URL returned from Skribble');
+      }
+
+      console.log(`✅ Signature request created: ${signatureResult.id}`);
+      console.log(`✅ Signing URL generated: ${signatureResult.signing_url}`);
+
+      return {
+        documentId: documentId,
+        signingUrl: signatureResult.signing_url
+      };
+
+    } catch (error) {
+      console.error('Error creating signature request:', error);
+      throw new Error(`Failed to create signature request: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate Swiss requirements
+   */
   private validateSwissRequirements(userData: any, selectedInsurance: any): void {
     const errors: string[] = [];
 
@@ -506,36 +350,40 @@ export class SkribbleService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
+  /**
+   * Get document status from Skribble
+   */
   async getDocumentStatus(documentId: string): Promise<any> {
-    try {
-      const accessToken = await this.getAccessToken();
-      
-      const response = await fetch(`${this.config.baseUrl}/v2/signature_requests/${documentId}`, {
-        headers: { 
-          'Authorization': this.getAuthorizationHeader(accessToken),
-          'Accept': 'application/json',
-          'User-Agent': 'CompanioxApp/1.0'
-        }
-      });
-      
-      if (response.ok) {
-        return await response.json();
+    const accessToken = await this.getAccessToken();
+    
+    const response = await fetch(`${this.config.baseUrl}/v2/signature-request/${documentId}`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'User-Agent': 'CompanioxApp/1.0'
       }
-      
+    });
+
+    if (!response.ok) {
       throw new Error(`Failed to get document status: ${response.status}`);
-    } catch (error) {
-      console.error('Error getting document status:', error);
-      throw error;
     }
+
+    return await response.json();
   }
 
+  /**
+   * Handle Skribble webhook
+   */
   async handleWebhook(payload: any, signature: string): Promise<any> {
     console.log('Processing Skribble webhook:', payload);
     
-    const { event_type, data } = payload;
-    console.log('Webhook event:', event_type, data?.document_id || data?.id);
-
-    return { processed: true, action: event_type };
+    // Verify webhook signature if needed
+    // const isValid = this.verifyWebhookSignature(payload, signature);
+    
+    return { 
+      processed: true, 
+      action: payload.event_type || 'unknown',
+      documentId: payload.signature_request?.id
+    };
   }
 }
 
@@ -545,20 +393,23 @@ export class SkribbleService {
 export const getSkribbleConfig = () => {
   const config = {
     apiKey: process.env.SKRIBBLE_API_KEY || '',
-    baseUrl: process.env.SKRIBBLE_BASE_URL || '',
+    baseUrl: process.env.SKRIBBLE_BASE_URL || 'https://api.skribble.de',
     environment: (process.env.SKRIBBLE_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production',
     webhookSecret: process.env.SKRIBBLE_WEBHOOK_SECRET || '',
     username: process.env.SKRIBBLE_USERNAME || ''
   };
 
-  // Validation
   if (!config.apiKey) {
     throw new Error('SKRIBBLE_API_KEY environment variable is required');
   }
 
-  console.log('Skribble configuration:', {
+  if (!config.username) {
+    throw new Error('SKRIBBLE_USERNAME environment variable is required');
+  }
+
+  console.log('Skribble configuration for signature requests:', {
     environment: config.environment,
-    baseUrl: config.baseUrl || 'auto-detect',
+    baseUrl: config.baseUrl,
     hasApiKey: !!config.apiKey,
     hasUsername: !!config.username
   });
