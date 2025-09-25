@@ -1,3 +1,4 @@
+// InsuranceSelectionPopup.tsx - PROPERLY STRUCTURED VERSION
 "use client";
 import React, { useState } from "react";
 import { Camera, CheckCircle, X, AlertCircle, FileText, PenTool } from "lucide-react";
@@ -19,13 +20,13 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     salutation: 'Herr',
     firstName: '',
     lastName: '',
-    birthDate: '',
+    birthDate: searchCriteria?.geburtsdatum || '',
     phone: '',
     email: '',
     address: '',
     nationality: '',
     ahvNumber: '',
-    currentInsurer: '', // Added field for current insurance company
+    currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
     currentPolicyNumber: '',
     insuranceStartDate: '',
     informationArt45: false,
@@ -118,7 +119,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
       setValidationErrors(prev => ({ ...prev, [id]: '' }));
     }
     
-    // Clear general error
     if (submitError) {
       setSubmitError('');
     }
@@ -145,7 +145,15 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     setSubmitError('');
   };
 
-  // Extract postal code from address or use search criteria
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
   const extractPostalCode = (address: string, fallback: string): string => {
     const match = address.match(/\b\d{4}\b/);
     return match ? match[0] : fallback;
@@ -169,53 +177,63 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     setCurrentStep('processing');
 
     try {
-      // Extract postal code and city from address
-      const postalCode = extractPostalCode(formData.address, searchCriteria?.plz || '');
+      // Get postal code from search criteria or extract from address
+      const postalCode = searchCriteria?.plz || extractPostalCode(formData.address, '8001');
       const city = extractCity(formData.address);
 
-      // Prepare submission data
-      const submissionData = {
-        // Personal Information
-        salutation: formData.salutation,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
-        birthDate: formData.birthDate,
-        address: formData.address.trim(),
-        postalCode: postalCode,
-        city: city,
-        nationality: formData.nationality.trim() || null,
-        ahvNumber: formData.ahvNumber.trim() || null,
-        currentInsurer: formData.currentInsurer.trim(),
-        currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
-        insuranceStartDate: formData.insuranceStartDate || null,
-        interestedInConsultation: formData.consultationInterest,
+      console.log('PRODUCTION: Starting user registration and document creation...');
 
-        // Search criteria from the original search
-        searchCriteria: {
-          postalCode: searchCriteria?.plz || postalCode,
-          birthDate: searchCriteria?.geburtsdatum || formData.birthDate,
-          franchise: searchCriteria?.franchise || '',
-          accidentCoverage: searchCriteria?.unfalldeckung || '',
-          currentModel: searchCriteria?.aktuellesModell || '',
+      // Convert file to base64 if uploaded
+      let idDocumentBase64 = null;
+      if (uploadedFile) {
+        try {
+          idDocumentBase64 = await fileToBase64(uploadedFile);
+        } catch (fileError) {
+          console.warn('File conversion failed:', fileError);
+        }
+      }
+
+      // Structure the request body correctly for the API validation
+      const requestBody = {
+        userData: {
+          salutation: formData.salutation,
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone.trim(),
+          birthDate: formData.birthDate,
+          address: formData.address.trim(),
+          postalCode: postalCode,
+          city: city || '',
+          nationality: formData.nationality.trim() || 'swiss',
+          ahvNumber: formData.ahvNumber.trim() || null,
           currentInsurer: formData.currentInsurer,
-          newToSwitzerland: searchCriteria?.newToSwitzerland || false
+          currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
+          insuranceStartDate: formData.insuranceStartDate || '01.01.2025',
+          interestedInConsultation: formData.consultationInterest
         },
 
-        // Selected insurance details
         selectedInsurance: {
           insurer: selectedInsurance?.Insurer || selectedInsurance?.Versicherer || 'Unknown',
           tariffName: selectedInsurance?.['Tariff name'] || selectedInsurance?.Modell || 'Standard',
           premium: parseFloat(String(selectedInsurance?.Bonus || selectedInsurance?.Praemie || 0)) || 0,
           franchise: String(selectedInsurance?.Franchise || searchCriteria?.franchise || '300'),
-          accidentInclusion: selectedInsurance?.['Accident Inclusion'] || selectedInsurance?.Unfalldeckung || searchCriteria?.unfalldeckung || '',
+          accidentInclusion: selectedInsurance?.['Accident Inclusion'] || selectedInsurance?.Unfalldeckung || searchCriteria?.unfalldeckung || 'Mit Unfalldeckung',
           ageGroup: selectedInsurance?.['Age group'] || selectedInsurance?.AgeRange || 'Adult',
           region: selectedInsurance?.Region || selectedInsurance?.Kanton || 'CH',
           fiscalYear: String(selectedInsurance?.['Fiscal year'] || selectedInsurance?.Jahr || '2025')
         },
 
-        // Compliance checkboxes
+        searchCriteria: {
+          postalCode: searchCriteria?.plz || postalCode,
+          birthDate: searchCriteria?.geburtsdatum || formData.birthDate,
+          franchise: searchCriteria?.franchise || '300',
+          accidentCoverage: searchCriteria?.unfalldeckung || 'Mit Unfalldeckung',
+          currentModel: searchCriteria?.aktuellesModell || 'Standard',
+          currentInsurer: formData.currentInsurer || searchCriteria?.aktuelleKK,
+          newToSwitzerland: searchCriteria?.newToSwitzerland || false
+        },
+
         compliance: {
           informationArt45: formData.informationArt45,
           agbAccepted: formData.agbAccepted,
@@ -224,131 +242,73 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
           consultationInterest: formData.consultationInterest
         },
 
-        // File upload
-        uploadedFile: uploadedFile ? {
-          name: uploadedFile.name,
-          size: uploadedFile.size,
-          type: uploadedFile.type
-        } : null
+        idDocument: idDocumentBase64
       };
 
-      console.log('Submitting data for Skribble processing:', submissionData);
+      console.log('PRODUCTION: Submitting with correct structure...', {
+        hasUserData: !!requestBody.userData,
+        hasCurrentInsurer: !!requestBody.userData.currentInsurer,
+        currentInsurer: requestBody.userData.currentInsurer,
+        hasSelectedInsurance: !!requestBody.selectedInsurance,
+        selectedInsurer: requestBody.selectedInsurance.insurer
+      });
 
-      // Step 1: Create user and save to database
-      const userResponse = await fetch('/api/users', {
+      // Create user and documents in one call
+      const response = await fetch('/api/skribble/create-documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify(submissionData),
-        signal: AbortSignal.timeout(15000)
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(60000)
       });
 
-      let userResult;
-      const contentType = userResponse.headers.get('content-type');
+      let result;
+      const contentType = response.headers.get('content-type');
       
       if (contentType && contentType.includes('application/json')) {
-        userResult = await userResponse.json();
+        result = await response.json();
       } else {
-        const textResult = await userResponse.text();
-        console.error('Non-JSON response:', textResult);
+        const textResult = await response.text();
+        console.error('Non-JSON response from Skribble API:', textResult);
         throw new Error('Server returned invalid response format');
       }
 
-      if (!userResponse.ok) {
-        console.error('User API Error Response:', userResult);
-        throw new Error(userResult?.error || userResult?.message || `Server error: ${userResponse.status}`);
+      if (!response.ok) {
+        console.error('Skribble API Error Response:', result);
+        throw new Error(result?.error || result?.message || `Server error: ${response.status}`);
       }
 
-      console.log('User created successfully:', userResult);
+      console.log('PRODUCTION: Documents created successfully:', result);
 
-      // Step 2: Handle file upload if present
-      if (uploadedFile && userResult?.userId) {
-        try {
-          const formDataFile = new FormData();
-          formDataFile.append('file', uploadedFile);
-          formDataFile.append('userId', String(userResult.userId));
-
-          await fetch('/api/upload', {
-            method: 'POST',
-            body: formDataFile,
-            signal: AbortSignal.timeout(10000)
-          });
-        } catch (uploadError) {
-          console.warn('File upload failed, but continuing with process:', uploadError);
-        }
-      }
-
-      // Step 3: Create Skribble documents and get signing URL
+      // Redirect to Skribble for signing
       setCurrentStep('redirect');
       
-      const skribbleResponse = await fetch('/api/skribble/create-documents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: userResult.userId,
-          userData: {
-            salutation: formData.salutation,
-            firstName: formData.firstName.trim(),
-            lastName: formData.lastName.trim(),
-            birthDate: formData.birthDate,
-            phone: formData.phone.trim(),
-            email: formData.email.trim().toLowerCase(),
-            address: formData.address.trim(),
-            postalCode: postalCode,
-            city: city,
-            nationality: formData.nationality.trim() || null,
-            ahvNumber: formData.ahvNumber.trim() || null,
-            currentInsurer: formData.currentInsurer.trim(),
-            currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
-            insuranceStartDate: formData.insuranceStartDate || null
-          },
-          selectedInsurance: {
-            insurer: selectedInsurance?.Insurer || selectedInsurance?.Versicherer || 'Unknown',
-            tariffName: selectedInsurance?.['Tariff name'] || selectedInsurance?.Modell || 'Standard',
-            premium: parseFloat(String(selectedInsurance?.Bonus || selectedInsurance?.Praemie || 0)) || 0,
-            franchise: String(selectedInsurance?.Franchise || searchCriteria?.franchise || '300'),
-            accidentInclusion: selectedInsurance?.['Accident Inclusion'] || selectedInsurance?.Unfalldeckung || searchCriteria?.unfalldeckung || '',
-            ageGroup: selectedInsurance?.['Age group'] || selectedInsurance?.AgeRange || 'Adult',
-            region: selectedInsurance?.Region || selectedInsurance?.Kanton || 'CH',
-            fiscalYear: String(selectedInsurance?.['Fiscal year'] || selectedInsurance?.Jahr || '2025')
-          }
-        }),
-        signal: AbortSignal.timeout(20000)
-      });
-
-      if (!skribbleResponse.ok) {
-        const skribbleError = await skribbleResponse.text();
-        console.error('Skribble API Error:', skribbleError);
-        throw new Error('Failed to create signing documents');
-      }
-
-      const skribbleResult = await skribbleResponse.json();
-      console.log('Skribble documents created successfully:', skribbleResult);
-
-      // Step 4: Redirect to Skribble for document signing
-      if (skribbleResult.signingUrl) {
-        // Store signing session info in sessionStorage for tracking
+      if (result.signingUrl) {
+        // Store signing session info for tracking
         sessionStorage.setItem('skribble_session', JSON.stringify({
-          userId: userResult.userId,
-          documentId: skribbleResult.documentId,
-          applicationDocumentId: skribbleResult.applicationDocumentId,
-          timestamp: Date.now()
+          userId: result.userId,
+          sessionId: result.sessionId,
+          documentIds: [result.documentId, result.applicationDocumentId],
+          timestamp: Date.now(),
+          environment: result.compliance?.environment || 'production'
         }));
 
+        console.log('PRODUCTION: Redirecting to Skribble signing URL:', result.signingUrl);
+
+        // Small delay to ensure user sees the redirect message
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         // Redirect to Skribble
-        window.location.href = skribbleResult.signingUrl;
+        window.location.href = result.signingUrl;
         return;
       } else {
-        throw new Error('No signing URL received from Skribble');
+        throw new Error('No signing URL received from Skribble service');
       }
 
     } catch (error: any) {
-      console.error('Submission error:', error);
+      console.error('PRODUCTION: Submission error:', error);
       
       let errorMessage = 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
       
@@ -358,8 +318,14 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
         errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Anfrage-Timeout. Bitte versuchen Sie es erneut.';
-      } else if (error.message.includes('existiert bereits')) {
+      } else if (error.message.includes('existiert bereits') || error.message.includes('USER_EXISTS')) {
         errorMessage = 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.';
+      } else if (error.message.includes('validation') || error.message.includes('VALIDATION_ERROR')) {
+        errorMessage = 'Pflichtfelder fehlen oder sind ungültig. Bitte überprüfen Sie Ihre Eingaben.';
+      } else if (error.message.includes('SKRIBBLE_ERROR')) {
+        errorMessage = 'Der Signaturdienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.';
+      } else if (error.message.includes('DATABASE_ERROR')) {
+        errorMessage = 'Datenbankverbindungsfehler. Bitte versuchen Sie es erneut.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -373,18 +339,17 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
 
   const handleClose = () => {
     if (submitSuccess) {
-      // Reset form data
       setFormData({
         salutation: 'Herr',
         firstName: '',
         lastName: '',
-        birthDate: '',
+        birthDate: searchCriteria?.geburtsdatum || '',
         phone: '',
         email: '',
         address: '',
         nationality: '',
         ahvNumber: '',
-        currentInsurer: '',
+        currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
         currentPolicyNumber: '',
         insuranceStartDate: '',
         informationArt45: false,
@@ -438,12 +403,12 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
           {currentStep === 'processing' && (
             <div className="text-center py-12">
               <div className="animate-spin w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto mb-4"></div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">Dokumente werden vorbereitet</h3>
+              <h3 className="text-2xl font-bold text-gray-800 mb-4">Benutzer wird registriert...</h3>
               <p className="text-gray-600 mb-2">
-                Ihre Daten werden gespeichert und die Kündigungsformulare werden erstellt...
+                Ihre Daten werden gespeichert und die Dokumente werden vorbereitet...
               </p>
               <p className="text-sm text-blue-600">
-                Sie werden in Kürze zu Skribble weitergeleitet.
+                Sie werden automatisch zu Skribble weitergeleitet.
               </p>
             </div>
           )}
@@ -453,7 +418,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               <PenTool className="w-16 h-16 text-blue-500 mx-auto mb-4" />
               <h3 className="text-2xl font-bold text-blue-600 mb-4">Weiterleitung zu Skribble</h3>
               <p className="text-gray-600 mb-6">
-                Die Dokumente sind bereit! Sie werden automatisch zu Skribble weitergeleitet, 
+                Ihre Registrierung war erfolgreich! Sie werden automatisch zu Skribble weitergeleitet, 
                 wo Sie die Kündigung und den neuen Versicherungsantrag digital signieren können.
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
@@ -492,11 +457,16 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               <p className="text-center text-gray-600 mb-2">
                 {selectedInsurance?.Insurer || selectedInsurance?.Versicherer} - {selectedInsurance?.['Tariff name'] || selectedInsurance?.Modell}
               </p>
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <div className="inline-flex items-center bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-700">
                   <FileText className="w-4 h-4 mr-2" />
-                  Digitale Signatur mit Skribble
+                  Produktions-Modus: Echte Skribble-Integration
                 </div>
+                {searchCriteria?.plz && (
+                  <div className="mt-2 text-sm text-green-600">
+                    ✓ PLZ {searchCriteria.plz} aus Ihrer Suche
+                  </div>
+                )}
               </div>
               
               {submitError && (
@@ -508,6 +478,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                  {/* Salutation */}
                   <div>
                     <label htmlFor="salutation" className="block text-sm font-medium text-gray-700 mb-1">
                       Anrede
@@ -524,6 +495,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                   </div>
                   <div></div>
                   
+                  {/* First Name */}
                   <div>
                     <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
                       Vorname*
@@ -543,6 +515,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
+                  {/* Last Name */}
                   <div>
                     <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
                       Nachname*
@@ -562,6 +535,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
+                  {/* Birth Date */}
                   <div>
                     <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Geburtsdatum*
@@ -582,6 +556,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
+                  {/* Phone */}
                   <div>
                     <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                       Telefonnummer*
@@ -602,6 +577,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
+                  {/* Email */}
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                       E-Mail*
@@ -622,6 +598,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
+                  {/* Address */}
                   <div>
                     <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
                       Adresse*
@@ -642,6 +619,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
 
+                  {/* Current Insurer */}
                   <div>
                     <label htmlFor="currentInsurer" className="block text-sm font-medium text-gray-700 mb-1">
                       Aktuelle Krankenversicherung*
@@ -667,6 +645,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
 
+                  {/* Current Policy Number */}
                   <div>
                     <label htmlFor="currentPolicyNumber" className="block text-sm font-medium text-gray-700 mb-1">
                       Aktuelle Policenummer
@@ -845,7 +824,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     className={`px-8 py-3 rounded-lg font-semibold transition duration-200 text-base focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center ${
                       submitting 
                         ? 'bg-gray-400 text-white cursor-not-allowed' 
-                        : 'bg-gray-900 text-white hover:bg-gray-700 focus:ring-gray-900'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
                     }`}
                   >
                     {submitting ? (
@@ -854,12 +833,12 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Vorbereitung...
+                        Registrierung läuft...
                       </>
                     ) : (
                       <>
                         <FileText className="w-5 h-5 mr-2" />
-                        Dokumente erstellen & signieren
+                        Registrieren & Dokumente signieren
                       </>
                     )}
                   </button>
@@ -871,6 +850,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
       </div>
     </div>
   );
-};
+  };
 
 export default InsuranceSelectionPopup;

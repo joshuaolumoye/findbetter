@@ -1,75 +1,80 @@
-// File: src/app/api/users/[id]/route.ts
+// app/api/users/[id]/route.ts - PRODUCTION MODE
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserDetails, updateUserStatus } from '../../../../lib/db-utils';
+import { getUserDetails } from '../../../lib/db-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log('Fetching user details for ID:', params.id);
+  
   try {
     const userId = parseInt(params.id);
     
-    if (isNaN(userId)) {
+    if (isNaN(userId) || userId <= 0) {
       return NextResponse.json(
-        { error: 'Invalid user ID' },
+        { 
+          error: 'Invalid user ID',
+          details: 'User ID must be a positive number',
+          code: 'INVALID_USER_ID'
+        },
         { status: 400 }
       );
     }
-    
-    const userDetails = await getUserDetails(userId);
-    
-    return NextResponse.json(userDetails);
-    
-  } catch (error) {
-    console.error('Error fetching user details:', error);
-    
-    if (error.message === 'User not found') {
+
+    // Get user details with timeout protection
+    const userDetails = await Promise.race([
+      getUserDetails(userId),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Database query timeout')), 15000)
+      )
+    ]);
+
+    if (!userDetails.user) {
       return NextResponse.json(
-        { error: 'User not found' },
+        { 
+          error: 'User not found',
+          details: `No user found with ID ${userId}`,
+          code: 'USER_NOT_FOUND'
+        },
         { status: 404 }
       );
     }
-    
-    return NextResponse.json(
-      { error: 'Failed to fetch user details' },
-      { status: 500 }
-    );
-  }
-}
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const userId = parseInt(params.id);
-    const { status, adminUser, notes } = await request.json();
-    
-    if (isNaN(userId)) {
-      return NextResponse.json(
-        { error: 'Invalid user ID' },
-        { status: 400 }
-      );
-    }
-    
-    if (!['pending', 'active', 'inactive', 'rejected'].includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status' },
-        { status: 400 }
-      );
-    }
-    
-    await updateUserStatus(userId, status, adminUser || 'admin', notes);
-    
+    console.log('User details fetched successfully for:', userDetails.user.email);
+
     return NextResponse.json({
       success: true,
-      message: 'User status updated successfully'
+      user: userDetails.user,
+      quotes: userDetails.quotes,
+      compliance: userDetails.compliance,
+      adminActions: userDetails.adminActions
     });
+
+  } catch (error: any) {
+    console.error('Error fetching user details:', error);
     
-  } catch (error) {
-    console.error('Error updating user status:', error);
+    if (error.message.includes('timeout')) {
+      return NextResponse.json(
+        { 
+          error: 'Request timeout',
+          details: 'Database query took too long',
+          code: 'TIMEOUT_ERROR'
+        },
+        { status: 408 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to update user status' },
+      { 
+        error: 'Failed to fetch user details',
+        details: process.env.NODE_ENV === 'production' 
+          ? 'Internal server error' 
+          : error.message,
+        code: 'FETCH_ERROR'
+      },
       { status: 500 }
     );
   }

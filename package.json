@@ -10,14 +10,17 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.7",
+    "@types/uuid": "^10.0.0",
     "bcryptjs": "^3.0.2",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.541.0",
-    "mysql2": "^3.14.5",
+    "mysql2": "^3.15.0",
     "next": "15.4.6",
+    "nodemailer": "^7.0.6",
     "pdf-lib": "^1.17.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
