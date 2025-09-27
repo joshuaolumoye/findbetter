@@ -45,13 +45,15 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
       
-      if (birthDate > today) {
-        errors.geburtsdatum = "Geburtsdatum kann nicht in der Zukunft liegen";
-      } else if (age > 120) {
+      // if (birthDate > today) {
+      //   errors.geburtsdatum = "Geburtsdatum kann nicht in der Zukunft liegen";
+      // } 
+       if (age > 120) {
         errors.geburtsdatum = "Bitte gültiges Geburtsdatum eingeben";
-      } else if (age < 18) {
-        errors.geburtsdatum = "Mindestalter 18 Jahre";
-      }
+      } 
+      // else if (age < 18) {
+      //   errors.geburtsdatum = "Mindestalter 18 Jahre";
+      // }
     }
     
     if (form.franchise === "Franchise") {
@@ -252,35 +254,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
             <p className="mt-1 text-sm text-red-600">{validationErrors.unfalldeckung}</p>
           )}
         </div>
-
-        <div className="mb-4">
-          <label htmlFor="aktuellesModell" className="block text-sm font-medium text-gray-500 mb-2">
-            Aktuelle KVG *
-          </label>
-          <select 
-            id="aktuellesModell" 
-            value={form.aktuellesModell} 
-            onChange={handleChange} 
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.aktuellesModell 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
-            }`}
-          >
-            <option value="Aktuelles Modell">Modell auswählen</option>
-            <option value="Standard">Standard (freie Arztwahl)</option>
-            <option value="HMO">HMO (Gesundheitszentrum)</option>
-            <option value="Hausarzt">Hausarzt (Hausarztmodell)</option>
-            <option value="Telmed">Telmed (Telemedizin)</option>
-          </select>
-          {validationErrors.aktuellesModell && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.aktuellesModell}</p>
-          )}
-        </div>
-
         <div className="mb-6">
           <label htmlFor="aktuelleKK" className="block text-sm font-medium text-gray-500 mb-2">
-            Arzt Modell *
+           Aktuelle KVG *
           </label>
           <select 
             id="aktuelleKK" 
@@ -300,6 +276,31 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
           </select>
           {validationErrors.aktuelleKK && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.aktuelleKK}</p>
+          )}
+        </div>
+
+        <div className="mb-4">
+          <label htmlFor="aktuellesModell" className="block text-sm font-medium text-gray-500 mb-2">
+             Arzt Modell *
+          </label>
+          <select 
+            id="aktuellesModell" 
+            value={form.aktuellesModell} 
+            onChange={handleChange} 
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+              validationErrors.aktuellesModell 
+                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
+            }`}
+          >
+            <option value="Aktuelles Modell">Modell auswählen</option>
+            <option value="Standard">Standard (freie Arztwahl)</option>
+            <option value="HMO">HMO (Gesundheitszentrum)</option>
+            <option value="Hausarzt">Hausarzt (Hausarztmodell)</option>
+            <option value="Telmed">Telmed (Telemedizin)</option>
+          </select>
+          {validationErrors.aktuellesModell && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.aktuellesModell}</p>
           )}
         </div>
 
