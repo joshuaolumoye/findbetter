@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
   const [form, setForm] = useState({
@@ -9,18 +9,33 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
     unfalldeckung: "Unfalldeckung",
     aktuellesModell: "Aktuelles Modell",
     aktuelleKK: "Aktuelle KK",
-    newToSwitzerland: false
+    newToSwitzerland: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
 
+  // 👇 helper to calculate age globally
+  const calculateAge = (dateString) => {
+    if (!dateString) return null;
+    const birthDate = new Date(dateString);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const age = calculateAge(form.geburtsdatum); // 👈 compute here for use in JSX
+
   const handleChange = (e) => {
     const { id, value, type, checked } = e.target;
-    const newValue = type === 'checkbox' ? checked : value;
-    
+    const newValue = type === "checkbox" ? checked : value;
+
     setForm({ ...form, [id]: newValue });
-    
+
     if (validationErrors[id]) {
       setValidationErrors({ ...validationErrors, [id]: "" });
     }
@@ -31,34 +46,26 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
 
   const validateForm = () => {
     const errors = {};
-    
+
     if (!form.plz) {
       errors.plz = "Postleitzahl ist erforderlich";
     } else if (!/^\d{4}$/.test(form.plz)) {
       errors.plz = "Gültige Schweizer PLZ (4 Ziffern) eingeben";
     }
-    
+
     if (!form.geburtsdatum) {
       errors.geburtsdatum = "Geburtsdatum ist erforderlich";
-    } else {
-      const birthDate = new Date(form.geburtsdatum);
-      const today = new Date();
-      const age = today.getFullYear() - birthDate.getFullYear();
-      
-      // if (birthDate > today) {
-      //   errors.geburtsdatum = "Geburtsdatum kann nicht in der Zukunft liegen";
-      // } 
-       if (age > 120) {
-        errors.geburtsdatum = "Bitte gültiges Geburtsdatum eingeben";
-      } 
-      // else if (age < 18) {
-      //   errors.geburtsdatum = "Mindestalter 18 Jahre";
-      // }
+    } else if (age > 120) {
+      errors.geburtsdatum = "Bitte gültiges Geburtsdatum eingeben";
     }
-    
+
     if (form.franchise === "Franchise") {
       errors.franchise = "Bitte Franchise auswählen";
+    } else if (age !== null && age < 18 && Number(form.franchise) < 1000) {
+      errors.franchise =
+        "Unter 18 Jahren darf keine Franchise unter CHF 1'000 gewählt werden";
     }
+
     if (form.unfalldeckung === "Unfalldeckung") {
       errors.unfalldeckung = "Bitte Unfalldeckung auswählen";
     }
@@ -68,7 +75,7 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
     if (form.aktuelleKK === "Aktuelle KK") {
       errors.aktuelleKK = "Bitte Krankenkasse auswählen";
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -209,19 +216,31 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
           <label htmlFor="franchise" className="block text-sm font-medium text-gray-500 mb-2">
             Franchise *
           </label>
-          <select 
-            id="franchise" 
-            value={form.franchise} 
-            onChange={handleChange} 
+          <select
+            id="franchise"
+            value={form.franchise}
+            onChange={handleChange}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.franchise 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
+              validationErrors.franchise
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
             }`}
           >
             <option value="Franchise">Franchise auswählen</option>
-            <option value="300">CHF 300 (Minimum)</option>
-            <option value="500">CHF 500</option>
+            <option
+              value="300"
+              disabled={age !== null && age < 18}
+              title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+            >
+              CHF 300 (Minimum)
+            </option>
+            <option
+              value="500"
+              disabled={age !== null && age < 18}
+              title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+            >
+              CHF 500
+            </option>
             <option value="1000">CHF 1'000</option>
             <option value="1500">CHF 1'500</option>
             <option value="2000">CHF 2'000</option>
