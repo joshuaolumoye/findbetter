@@ -213,43 +213,65 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
         </div>
 
         <div className="mb-4">
-          <label htmlFor="franchise" className="block text-sm font-medium text-gray-500 mb-2">
-            Franchise *
-          </label>
-          <select
-            id="franchise"
-            value={form.franchise}
-            onChange={handleChange}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.franchise
-                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
-            }`}
-          >
-            <option value="Franchise">Franchise auswählen</option>
-            <option
-              value="300"
-              disabled={age !== null && age < 18}
-              title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-            >
-              CHF 300 (Minimum)
-            </option>
-            <option
-              value="500"
-              disabled={age !== null && age < 18}
-              title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-            >
-              CHF 500
-            </option>
-            <option value="1000">CHF 1'000</option>
-            <option value="1500">CHF 1'500</option>
-            <option value="2000">CHF 2'000</option>
-            <option value="2500">CHF 2'500 (Maximum)</option>
-          </select>
-          {validationErrors.franchise && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.franchise}</p>
-          )}
-        </div>
+  <label htmlFor="franchise" className="block text-sm font-medium text-gray-500 mb-2">
+    Franchise *
+  </label>
+  <select
+    id="franchise"
+    value={form.franchise}
+    onChange={handleChange}
+    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+      validationErrors.franchise
+        ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+        : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
+    }`}
+  >
+    <option value="Franchise">Franchise auswählen</option>
+
+    {/* Always available */}
+    <option value="100">CHF 100 (Minimum)</option>
+    <option value="200">CHF 200</option>
+    <option value="300">CHF 300</option>
+    <option value="400">CHF 400</option>
+    <option value="500">CHF 500</option>
+    <option value="600">CHF 600</option>
+
+    {/* Restricted only if under 18 */}
+    <option
+      value="1000"
+      disabled={age !== null && age < 18}
+      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+    >
+      CHF 1'000
+    </option>
+    <option
+      value="1500"
+      disabled={age !== null && age < 18}
+      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+    >
+      CHF 1'500
+    </option>
+    <option
+      value="2000"
+      disabled={age !== null && age < 18}
+      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+    >
+      CHF 2'000
+    </option>
+    <option
+      value="2500"
+      disabled={age !== null && age < 18}
+      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
+    >
+      CHF 2'500 (Maximum)
+    </option>
+  </select>
+
+  {validationErrors.franchise && (
+    <p className="mt-1 text-sm text-red-600">{validationErrors.franchise}</p>
+  )}
+</div>
+
 
         <div className="mb-4">
           <label htmlFor="unfalldeckung" className="block text-sm font-medium text-gray-500 mb-2">
