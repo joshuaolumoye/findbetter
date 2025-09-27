@@ -1,7 +1,6 @@
-// app/api/users/route.ts - PRODUCTION MODE FIXED
 import { NextRequest, NextResponse } from 'next/server';
-import { createUserWithInsurance, getAllUsers } from '../../lib/db-utils';
-import { checkDatabaseHealth } from '../../lib/db-utils';
+import { createUserWithInsurance, getAllUsers } from '../../../lib/db-utils';
+import { checkDatabaseHealth } from '../../../lib/db-utils';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';

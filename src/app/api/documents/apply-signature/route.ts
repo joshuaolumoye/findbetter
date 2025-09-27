@@ -1,4 +1,3 @@
-// app/api/documents/apply-signature/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import sharp from 'sharp';

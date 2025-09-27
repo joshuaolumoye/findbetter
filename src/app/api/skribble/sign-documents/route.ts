@@ -1,4 +1,3 @@
-// app/api/skribble/sign-documents/route.ts - Production Mode
 import { NextRequest, NextResponse } from 'next/server';
 import { SkribbleService } from '../../../../../services/SkribbleService';
 import { PDFTemplateManager } from '../../../../../services/PDFTemplateManager';

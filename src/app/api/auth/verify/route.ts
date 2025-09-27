@@ -1,5 +1,3 @@
-// File: src/app/api/auth/verify/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
 

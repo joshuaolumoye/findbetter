@@ -1,4 +1,3 @@
-// InsuranceSelectionPopup.tsx - PROPERLY STRUCTURED VERSION
 "use client";
 import React, { useState } from "react";
 import { Camera, CheckCircle, X, AlertCircle, FileText, PenTool } from "lucide-react";
@@ -282,9 +281,29 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
 
       console.log('PRODUCTION: Documents created successfully:', result);
 
-      // Redirect to Skribble for signing
-      setCurrentStep('redirect');
-      
+      // Check if we have success response (no signingUrl means redirect to success page)
+      if (result.success && !result.signingUrl) {
+        // Store session info for success page
+        sessionStorage.setItem('skribble_session', JSON.stringify({
+          sessionId: result.sessionId,
+          documentIds: [result.cancellationDocumentId, result.applicationDocumentId],
+          currentInsurer: result.currentInsurer,
+          selectedInsurer: result.selectedInsurer,
+          userEmail: result.userEmail,
+          timestamp: Date.now()
+        }));
+
+        console.log('PRODUCTION: Redirecting to success page...');
+        
+        // Small delay to ensure user sees the processing message
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Redirect to success page
+        window.location.href = '/success';
+        return;
+      }
+
+      // Original Skribble redirect logic (if signingUrl is provided)
       if (result.signingUrl) {
         // Store signing session info for tracking
         sessionStorage.setItem('skribble_session', JSON.stringify({
@@ -303,8 +322,9 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
         // Redirect to Skribble
         window.location.href = result.signingUrl;
         return;
-      } else {
-        throw new Error('No signing URL received from Skribble service');
+      }else {
+          // If neither success nor signingUrl, throw error
+          throw new Error('No valid response received from service');
       }
 
     } catch (error: any) {
@@ -460,7 +480,7 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               <div className="text-center mb-6">
                 <div className="inline-flex items-center bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-700">
                   <FileText className="w-4 h-4 mr-2" />
-                  Produktions-Modus: Echte Skribble-Integration
+                   Echte Skribble-Integration
                 </div>
                 {searchCriteria?.plz && (
                   <div className="mt-2 text-sm text-green-600">

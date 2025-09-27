@@ -1,4 +1,3 @@
-// app/api/skribble/create-documents/route.ts - SIMPLIFIED & WORKING
 import { NextRequest, NextResponse } from 'next/server';
 import { SkribbleService, getSkribbleConfig } from '../../../../../services/SkribbleService';
 import { createUserWithInsurance } from '../../../../lib/db-utils';

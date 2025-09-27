@@ -1,5 +1,3 @@
-// File: src/app/api/auth/logout/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { destroySession } from '@/lib/auth';
 import { cookies } from 'next/headers';

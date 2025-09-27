@@ -1,6 +1,5 @@
-// app/api/skribble/webhook/route.ts - UPDATED WEBHOOK HANDLER
 import { NextRequest, NextResponse } from 'next/server';
-import { SkribbleService } from '../../../../services/SkribbleService';
+import { SkribbleService } from '../../../../../services/SkribbleService';
 import crypto from 'crypto';
 
 export const maxDuration = 30;

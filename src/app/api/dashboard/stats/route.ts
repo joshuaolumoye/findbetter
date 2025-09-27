@@ -1,4 +1,3 @@
-// File: src/app/api/dashboard/stats/route.ts
 import { NextResponse } from 'next/server';
 import { getDashboardStats } from '../../../../lib/db-utils';
 

@@ -1,37 +1,63 @@
 import { useState, useEffect } from 'react';
+import React, { ReactNode } from "react";
 import { Search, Filter, Plus, Users, TrendingUp, DollarSign, AlertCircle, RefreshCw } from 'lucide-react';
 
-// UserCard Component
+type Status = 'active' | 'inactive' | 'pending' | 'rejected';
+
 interface UserData {
   id: number;
-  name: string;
+  status: string;
   full_name?: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
-  phone: string;
-  joinDate: string;
+  phone?: string;
   join_date?: string;
-  policyCount: number;
-  totalPremium: number;
+  joinDate?: string;
+  totalPremium?: number;
   total_premium?: number;
-  status: 'active' | 'inactive' | 'pending' | 'rejected';
+  policyCount: number;
+  annual_savings?: number;
+  compliance_status?: 'Complete' | 'Incomplete';
   avatar?: string;
   canton?: string;
   postal_code?: string;
   selected_insurer?: string;
-  annual_savings?: number;
-  compliance_status?: 'Complete' | 'Incomplete';
+  name?: string; // added since you build it dynamically
+}
+interface DashboardStats {
+  total_users: number;
+  active_users: number;
+  total_approved_premium: number;
+  pending_users: number;
 }
 
-function UserCard({ user, onClick, formatCurrency, getStatusColor }) {
+const defaultStats: DashboardStats = {
+  total_users: 0,
+  active_users: 0,
+  total_approved_premium: 0,
+  pending_users: 0,
+};
+function UserCard({
+  user,
+  onClick,
+  formatCurrency,
+  getStatusColor
+}: {
+  user: UserData;
+  onClick: (user: UserData) => void;
+  formatCurrency?: (amount: number) => string;
+  getStatusColor?: (status: string) => string;
+}) {
   // Normalize user data from database
   const normalizedUser = {
     ...user,
-    name: user.name || user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+    name:  user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
     joinDate: user.joinDate || (user.join_date ? new Date(user.join_date).toLocaleDateString('de-CH') : 'N/A'),
     totalPremium: user.totalPremium || user.total_premium || 0,
   };
 
-  const defaultGetStatusColor = (status) => {
+  const defaultGetStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
       case 'inactive': return 'bg-red-100 text-red-800';
@@ -41,7 +67,7 @@ function UserCard({ user, onClick, formatCurrency, getStatusColor }) {
     }
   };
 
-  const defaultFormatCurrency = (amount) => {
+  const defaultFormatCurrency = (amount: number) => {
     return new Intl.NumberFormat('de-CH', {
       style: 'currency',
       currency: 'CHF',
@@ -135,16 +161,18 @@ function UserCard({ user, onClick, formatCurrency, getStatusColor }) {
 }
 
 // UserDetails Component
-function UserDetails({ user, onBack }) {
+function UserDetails({ user, onBack }: { user: UserData; onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userDetails, setUserDetails] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedStatus, setEditedStatus] = useState(user.status);
   const [adminNotes, setAdminNotes] = useState('');
+  const [stats, setStats] = useState<DashboardStats>(defaultStats);
 
+  
   // Format currency helper
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('de-CH', {
       style: 'currency',
       currency: 'CHF',
@@ -165,23 +193,26 @@ function UserDetails({ user, onBack }) {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch user details: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setUserDetails(data);
     } catch (err) {
       console.error('Error fetching user details:', err);
-      setError(err.message || 'Failed to fetch user details');
-    } finally {
-      setLoading(false);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to fetch user details');
+      }
     }
-  };
+  }; 
+
 
   // Update user status
-  const updateUserStatus = async () => {
+    const updateUserStatus = async () => {
     setLoading(true);
     setError('');
     
@@ -207,18 +238,25 @@ function UserDetails({ user, onBack }) {
       setAdminNotes('');
     } catch (err) {
       console.error('Error updating user status:', err);
-      setError(err.message || 'Failed to update user status');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to update user status');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+
+
   useEffect(() => {
     fetchUserDetails();
   }, [user.id]);
 
-  const getStatusColor = (status) => {
-    switch (status) {
+  type Status = 'active' | 'inactive' | 'pending' | 'rejected';
+  const getStatusColor = (status: Status): string => {
+  switch (status) {
       case 'active': return 'bg-green-100 text-green-800 border-green-200';
       case 'inactive': return 'bg-red-100 text-red-800 border-red-200';
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -227,36 +265,55 @@ function UserDetails({ user, onBack }) {
     }
   };
 
-  const getStatusIcon = (status) => {
-    const iconStyle = "h-4 w-4";
-    switch (status) {
-      case 'active': return <span className={iconStyle}>✓</span>;
-      case 'pending': return <span className={iconStyle}>⏱</span>;
-      case 'rejected': return <span className={iconStyle}>✗</span>;
-      default: return <span className={iconStyle}>⚠</span>;
-    }
-  };
+const getStatusIcon = (status: Status): ReactNode => {
+  const iconStyle = "h-4 w-4";
+  switch (status) {
+    case 'active': return <span className={iconStyle}>✓</span>;
+    case 'pending': return <span className={iconStyle}>⏱</span>;
+    case 'rejected': return <span className={iconStyle}>✗</span>;
+    default: return <span className={iconStyle}>⚠</span>;
+  }
+};
 
-  // Mock policy data based on user data
-  const generateMockPolicies = (userData) => {
-    const policies = [];
-    
-    if (userData.selected_insurer) {
-      policies.push({
-        id: '1',
-        type: 'Krankenversicherung',
-        number: `KV-${userData.id}-001`,
-        status: userData.status === 'active' ? 'active' : 'pending',
-        premium: userData.totalPremium || userData.total_premium || 0,
-        startDate: '2024-01-01',
-        endDate: '2024-12-31',
-        coverage: 'Grundversicherung',
-        insurer: userData.selected_insurer
-      });
-    }
-    
-    return policies;
-  };
+interface UserData {
+  id: string | number;
+  status?: string;
+  totalPremium?: number;
+  total_premium?: number;
+  selected_insurer?: string;
+}
+
+interface Policy {
+  id: string;
+  type: string;
+  number: string;
+  status: 'active' | 'pending';
+  premium: number;
+  startDate: string;
+  endDate: string;
+  coverage: string;
+  insurer?: string;
+}
+
+ const generateMockPolicies = (userData: UserData): Policy[] => {
+  const policies: Policy[] = [];
+
+  if (userData.selected_insurer) {
+    policies.push({
+      id: '1',
+      type: 'Krankenversicherung',
+      number: `KV-${userData.id}-001`,
+      status: userData.status === 'active' ? 'active' : 'pending',
+      premium: userData.totalPremium || userData.total_premium || 0,
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      coverage: 'Grundversicherung',
+      insurer: userData.selected_insurer,
+    });
+  }
+
+  return policies;
+};
 
   const policies = generateMockPolicies(user);
 
@@ -300,14 +357,15 @@ function UserDetails({ user, onBack }) {
           <div className="flex items-center space-x-3">
             {!isEditing ? (
               <>
-                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${getStatusColor(user.status)}`}>
-                  {getStatusIcon(user.status)}
+                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${getStatusColor(user.status as Status)}`}>
+                  {getStatusIcon(user.status as Status)}
                   <span className="text-sm font-medium">
                     {user.status === 'active' ? 'Aktiv' : 
-                     user.status === 'pending' ? 'Ausstehend' : 
-                     user.status === 'inactive' ? 'Inaktiv' : 'Abgelehnt'}
+                    user.status === 'pending' ? 'Ausstehend' : 
+                    user.status === 'inactive' ? 'Inaktiv' : 'Abgelehnt'}
                   </span>
                 </div>
+
                 <button
                   onClick={() => setIsEditing(true)}
                   className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
@@ -383,7 +441,7 @@ function UserDetails({ user, onBack }) {
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              {user.name || user.full_name || 'Unnamed User'}
+               {user.name || user.full_name || 'Unnamed User'}
             </h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
               <div className="flex items-center">
@@ -520,14 +578,14 @@ function UserDetails({ user, onBack }) {
       </div>
     </div>
   );
-}
+};
 
 // Main Dashboard Component
 export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -561,16 +619,16 @@ export default function Dashboard() {
       }
       
       const usersData = await usersResponse.json();
-      
+
       // Transform database users to match UserData interface
-      const transformedUsers = (usersData.users || []).map(user => ({
+      const transformedUsers: UserData[] = (usersData.users || []).map((user: UserData) => ({
         ...user,
         name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
         joinDate: user.join_date ? new Date(user.join_date).toLocaleDateString('de-CH') : 'N/A',
-        totalPremium: user.selected_premium || 0,
+        totalPremium: user.totalPremium || user.total_premium || 0,
         policyCount: 1, // Default to 1 for now
       }));
-      
+
       setUsers(transformedUsers);
 
       // Fetch statistics
@@ -580,6 +638,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
         },
       });
+
       
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
@@ -589,15 +648,19 @@ export default function Dashboard() {
         setStats({});
       }
 
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setError(err.message || 'Failed to fetch data');
-      setUsers([]);
-      setStats({});
-    } finally {
-      setLoading(false);
+    }  catch (err) {
+    console.error('Error fetching data:', err);
+    if (err instanceof Error) {
+      setError(err.message);
+    } else {
+      setError('Failed to fetch data');
     }
-  };
+    setUsers([]);
+    setStats(defaultStats); // reset stats safely
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Fetch data on component mount and when filters change
   useEffect(() => {
@@ -607,17 +670,17 @@ export default function Dashboard() {
   }, [searchTerm, filterStatus, mounted]);
 
   // Handle search with debouncing
-  const handleSearch = (value) => {
+  const handleSearch = (value: string) => {
     setSearchTerm(value);
   };
 
   // Handle status filter change
-  const handleStatusFilter = (status) => {
+  const handleStatusFilter = (status: string) => {
     setFilterStatus(status);
   };
 
   // Handle user selection
-  const handleSelectUser = (user) => {
+  const handleSelectUser = (user: UserData) => {
     setSelectedUser(user);
   };
 
@@ -630,26 +693,27 @@ export default function Dashboard() {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'text-green-600';
-      case 'inactive': return 'text-red-600';
-      case 'pending': return 'text-yellow-600';
-      case 'rejected': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
+  const getStatusColor = (status: Status): string => {
+  switch (status) {
+    case 'active': return 'text-green-600';
+    case 'inactive': return 'text-red-600';
+    case 'pending': return 'text-yellow-600';
+    case 'rejected': return 'text-red-600';
+    default: return 'text-gray-600';
+  }
+};
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number): string => {
     if (!mounted) return 'CHF 0'; // Prevent hydration mismatch
-    
+
     return new Intl.NumberFormat('de-CH', {
       style: 'currency',
       currency: 'CHF',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      maximumFractionDigits: 0,
     }).format(amount || 0);
   };
+
 
   // Don't render until mounted to prevent hydration issues
   if (!mounted) {
@@ -673,9 +737,9 @@ export default function Dashboard() {
     );
   }
 
-  if (selectedUser) {
-    return <UserDetails user={selectedUser} onBack={handleBackFromDetails} />;
-  }
+  // if (selectedUser) {
+  //   return <UserDetails user={selectedUser} onBack={handleBackFromDetails} />;
+  // }
 
   return (
     <div className="space-y-6">
@@ -717,7 +781,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-gray-600">Gesamte Benutzer</p>
               <p className="text-2xl font-bold text-gray-900">
-                {loading ? '...' : (stats.total_users || 0)}
+                {loading ? '...' : stats.total_users}
               </p>
             </div>
             <Users className="h-8 w-8 text-blue-600" />

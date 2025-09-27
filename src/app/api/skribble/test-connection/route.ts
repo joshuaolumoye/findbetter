@@ -1,4 +1,3 @@
-// app/api/skribble/test-connection/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { SkribbleService } from '../../../../../services/SkribbleService';
 

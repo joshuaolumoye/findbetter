@@ -1,4 +1,4 @@
-// services/SkribbleService.ts - FIXED to actually create signature requests
+// services/SkribbleService.ts - UPDATED to use working v2/signature-requests endpoint
 import { PDFTemplateManager } from './PDFTemplateManager';
 
 interface SkribbleConfig {
@@ -92,7 +92,7 @@ export class SkribbleService {
   }
 
   /**
-   * FIXED: Process Swiss insurance switch WITH Skribble signature requests
+   * UPDATED: Process Swiss insurance switch using the working v2/signature-requests endpoint
    */
   async processSwissInsuranceSwitch(userData: any, selectedInsurance: any): Promise<any> {
     try {
@@ -113,47 +113,30 @@ export class SkribbleService {
 
       console.log('PDFs generated successfully, creating Skribble signature requests...');
 
-      // Create signature requests in Skribble
-      const [cancellationRequest, applicationRequest] = await Promise.all([
-        this.createSignatureRequest({
-          title: `KVG Kündigung ${new Date().getFullYear()} - ${userData.firstName} ${userData.lastName}`,
-          documentBuffer: cancellationPdf,
-          signer: {
-            email: userData.email,
-            firstName: userData.firstName,
-            lastName: userData.lastName
-          },
-          accessToken
-        }),
-        this.createSignatureRequest({
-          title: `Krankenversicherungsantrag ${selectedInsurance.insurer} - ${userData.firstName} ${userData.lastName}`,
-          documentBuffer: applicationPdf,
-          signer: {
-            email: userData.email,
-            firstName: userData.firstName,
-            lastName: userData.lastName
-          },
-          accessToken
-        })
-      ]);
+      // Create BOTH signature requests using the working endpoint
+      const signatureRequests = await this.createBothSignatureRequests({
+        cancellationPdf,
+        applicationPdf,
+        userData,
+        selectedInsurance,
+        accessToken
+      });
 
-      console.log('Skribble signature requests created successfully');
+      console.log('Both Skribble signature requests created successfully');
 
       // Generate session ID
       const sessionId = `session_${Date.now()}`;
 
-      // Return the ACTUAL Skribble signing URL
+      // Return the signing URLs for both documents
       return {
-        redirectUrl: cancellationRequest.signingUrl, // ← REAL Skribble signing URL
-        cancellationDocumentId: cancellationRequest.documentId,
-        applicationDocumentId: applicationRequest.documentId,
+        success: true,
         sessionId: sessionId,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        mode: 'skribble_signing', // ← Indicates real Skribble mode
-        signingUrls: {
-          cancellation: cancellationRequest.signingUrl,
-          application: applicationRequest.signingUrl
-        }
+        cancellationDocumentId: signatureRequests.cancellation.requestId,
+        applicationDocumentId: signatureRequests.application.requestId,
+        currentInsurer: userData.currentInsurer,
+        selectedInsurer: selectedInsurance.insurer,
+        userEmail: userData.email,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       };
 
     } catch (error) {
@@ -163,154 +146,144 @@ export class SkribbleService {
   }
 
   /**
-   * Create signature request in Skribble - FIXED for server-side Node.js
+   * NEW: Create both signature requests using the working v2/signature-requests endpoint
    */
-  private async createSignatureRequest(params: {
+  private async createBothSignatureRequests(params: {
+    cancellationPdf: Buffer;
+    applicationPdf: Buffer;
+    userData: any;
+    selectedInsurance: any;
+    accessToken: string;
+  }): Promise<{
+    cancellation: { requestId: string; signingUrl: string };
+    application: { requestId: string; signingUrl: string };
+  }> {
+    
+    console.log('Creating both signature requests using v2/signature-requests endpoint...');
+
+    try {
+      // Convert PDFs to base64
+      const cancellationBase64 = params.cancellationPdf.toString('base64');
+      const applicationBase64 = params.applicationPdf.toString('base64');
+
+      // Create cancellation signature request
+      const cancellationRequest = await this.createSignatureRequestV2({
+        title: `KVG Kündigung ${new Date().getFullYear()} - ${params.userData.firstName} ${params.userData.lastName}`,
+        message: 'Bitte unterschreiben Sie diese wichtige KVG-Kündigung.',
+        content: cancellationBase64,
+        signer: {
+          email: params.userData.email,
+          firstName: params.userData.firstName,
+          lastName: params.userData.lastName
+        },
+        accessToken: params.accessToken
+      });
+
+      // Create application signature request
+      const applicationRequest = await this.createSignatureRequestV2({
+        title: `Krankenversicherungsantrag ${params.selectedInsurance.insurer} - ${params.userData.firstName} ${params.userData.lastName}`,
+        message: 'Bitte unterschreiben Sie diesen Krankenversicherungsantrag.',
+        content: applicationBase64,
+        signer: {
+          email: params.userData.email,
+          firstName: params.userData.firstName,
+          lastName: params.userData.lastName
+        },
+        accessToken: params.accessToken
+      });
+
+      return {
+        cancellation: cancellationRequest,
+        application: applicationRequest
+      };
+
+    } catch (error) {
+      console.error('Error creating signature requests:', error);
+      throw new Error(`Failed to create signature requests: ${error.message}`);
+    }
+  }
+
+  /**
+   * NEW: Create signature request using the working v2/signature-requests endpoint
+   */
+  private async createSignatureRequestV2(params: {
     title: string;
-    documentBuffer: Buffer;
+    message: string;
+    content: string; // base64 PDF content
     signer: {
       email: string;
       firstName: string;
       lastName: string;
     };
     accessToken: string;
-  }): Promise<{ documentId: string; signingUrl: string }> {
+  }): Promise<{ requestId: string; signingUrl: string }> {
     
     console.log(`Creating Skribble signature request: ${params.title}`);
-    console.log('PDF Buffer size:', params.documentBuffer.length, 'bytes');
 
     try {
-      // Step 1: Upload document using proper Node.js FormData
-      const uploadUrl = `${this.config.baseUrl}/v2/document`;
-      
-      // Import FormData for Node.js environment
-      const FormData = require('form-data');
-      const formData = new FormData();
-      
-      // Create a safe filename (remove special characters)
-      const safeTitle = params.title.replace(/[^a-zA-Z0-9\s\-_]/g, '').replace(/\s+/g, '_');
-      const filename = `${safeTitle}.pdf`;
-      
-      // Validate PDF buffer
-      if (!params.documentBuffer || params.documentBuffer.length < 100) {
-        throw new Error('Invalid or empty PDF buffer');
-      }
-      
-      // Check if it's actually a PDF
-      const pdfHeader = params.documentBuffer.slice(0, 4).toString();
-      if (!pdfHeader.startsWith('%PDF')) {
-        throw new Error('Buffer does not contain a valid PDF document');
-      }
+      const signatureUrl = `${this.config.baseUrl}/v2/signature-requests`;
 
-      formData.append('file', params.documentBuffer, {
-        filename: filename,
-        contentType: 'application/pdf'
-      });
-      formData.append('title', params.title);
-
-      console.log('Uploading to Skribble:', { 
-        url: uploadUrl, 
-        filename,
-        bufferSize: params.documentBuffer.length,
-        title: params.title 
-      });
-
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${params.accessToken}`,
-          'User-Agent': 'CompanioxApp/1.0',
-          ...formData.getHeaders() // This adds proper Content-Type for multipart/form-data
-        },
-        body: formData
-      });
-
-      console.log('Upload response status:', uploadResponse.status);
-      
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error('Upload error response:', errorText);
-        
-        // Handle specific Skribble errors
-        if (uploadResponse.status === 401) {
-          throw new Error('Skribble authentication failed - check API credentials');
-        } else if (uploadResponse.status === 413) {
-          throw new Error('PDF file too large for Skribble (max 25MB)');
-        } else if (uploadResponse.status === 422) {
-          throw new Error('Invalid PDF format or corrupted file');
-        } else if (uploadResponse.status === 500) {
-          throw new Error('Skribble server error - please try again in a few minutes');
-        }
-        
-        throw new Error(`Document upload failed: ${uploadResponse.status} - ${errorText}`);
-      }
-
-      const uploadResult = await uploadResponse.json();
-      const documentId = uploadResult.id;
-
-      if (!documentId) {
-        throw new Error('No document ID returned from Skribble upload');
-      }
-
-      console.log(`✅ Document uploaded to Skribble: ${documentId}`);
-
-      // Step 2: Create signature request
-      const signatureUrl = `${this.config.baseUrl}/v2/signature-request`;
-
-      const signatureRequestData = {
-        document_id: documentId,
+      const requestPayload = {
         title: params.title,
-        message: 'Bitte unterschreiben Sie dieses wichtige KVG-Dokument.',
-        signature_type: 'qes', // Qualified Electronic Signature for Swiss legal compliance
-        signers: [
+        message: params.message,
+        content: params.content, // base64 PDF content
+        signatures: [
           {
-            email: params.signer.email,
-            first_name: params.signer.firstName,
-            last_name: params.signer.lastName,
-            language: 'de'
+            account_email: params.signer.email
           }
-        ],
-        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/skribble/webhook`,
-        expire_days: 30
+        ]
       };
 
-      console.log('Creating signature request:', { 
-        documentId, 
+      console.log('Sending signature request to Skribble:', { 
+        url: signatureUrl, 
+        title: params.title,
         signerEmail: params.signer.email,
-        title: params.title 
+        contentSize: params.content.length
       });
 
-      const signatureResponse = await fetch(signatureUrl, {
+      const response = await fetch(signatureUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${params.accessToken}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'User-Agent': 'CompanioxApp/1.0'
         },
-        body: JSON.stringify(signatureRequestData)
+        body: JSON.stringify(requestPayload)
       });
 
-      console.log('Signature request response status:', signatureResponse.status);
+      console.log('Signature request response status:', response.status);
 
-      if (!signatureResponse.ok) {
-        const errorText = await signatureResponse.text();
-        console.error('Signature request error:', errorText);
-        throw new Error(`Signature request failed: ${signatureResponse.status} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Signature request error response:', errorText);
+        
+        if (response.status === 401) {
+          throw new Error('Skribble authentication failed - check API credentials');
+        } else if (response.status === 413) {
+          throw new Error('PDF file too large for Skribble (max 25MB)');
+        } else if (response.status === 422) {
+          throw new Error('Invalid PDF format or corrupted file');
+        } else if (response.status === 500) {
+          throw new Error('Skribble server error - please try again in a few minutes');
+        }
+        
+        throw new Error(`Signature request failed: ${response.status} - ${errorText}`);
       }
 
-      const signatureResult = await signatureResponse.json();
+      const result = await response.json();
 
-      if (!signatureResult.signing_url) {
-        console.error('No signing URL in response:', signatureResult);
-        throw new Error('No signing URL returned from Skribble');
+      if (!result.id) {
+        console.error('No request ID in response:', result);
+        throw new Error('No request ID returned from Skribble');
       }
 
-      console.log(`✅ Signature request created: ${signatureResult.id}`);
-      console.log(`✅ Signing URL generated: ${signatureResult.signing_url}`);
+      // ✅ Instead of redirecting to Skribble signing URL, go to success page
+      console.log(`✅ Signature request created: ${result.id}`);
 
       return {
-        documentId: documentId,
-        signingUrl: signatureResult.signing_url
+        requestId: result.id,
+        signingUrl: '' // empty since we're redirecting to success page instead
       };
 
     } catch (error) {
@@ -318,7 +291,6 @@ export class SkribbleService {
       throw new Error(`Failed to create signature request: ${error.message}`);
     }
   }
-
   /**
    * Validate Swiss requirements
    */
@@ -356,7 +328,7 @@ export class SkribbleService {
   async getDocumentStatus(documentId: string): Promise<any> {
     const accessToken = await this.getAccessToken();
     
-    const response = await fetch(`${this.config.baseUrl}/v2/signature-request/${documentId}`, {
+    const response = await fetch(`${this.config.baseUrl}/v2/signature-requests/${documentId}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'User-Agent': 'CompanioxApp/1.0'

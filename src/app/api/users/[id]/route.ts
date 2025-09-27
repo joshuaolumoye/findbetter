@@ -1,17 +1,17 @@
-// app/api/users/[id]/route.ts - PRODUCTION MODE
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserDetails } from '../../../lib/db-utils';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { getUserDetails } from '../../../../lib/db-utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: any
 ) {
-  console.log('Fetching user details for ID:', params.id);
+  console.log('Fetching user details for ID:', context.params.id);
   
   try {
-    const userId = parseInt(params.id);
+    const userId = parseInt(context.params.id);
     
     if (isNaN(userId) || userId <= 0) {
       return NextResponse.json(
