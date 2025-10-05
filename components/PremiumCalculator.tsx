@@ -557,7 +557,7 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           <button
             type="button"
             onClick={() => onAddPerson && onAddPerson()}
-            className="text-blue-600 hover:text-blue-800 font-medium text-sm underline"
+            className="text-black hover:text-gray-700 font-medium text-sm underline"
           >
             + Für weitere Person berechnen
           </button>
