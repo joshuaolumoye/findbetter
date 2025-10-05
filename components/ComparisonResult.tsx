@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import InsuranceSelectionPopup from "./InsuranceSelectionPopup";
 
-// --- Medal Icons ---
 const GoldMedalIcon = () => (
   <svg
     className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400"
@@ -33,7 +32,7 @@ const BronzeMedalIcon = () => (
   </svg>
 );
 
-const getMedalIcon = (index: number) => {
+const getMedalIcon = (index) => {
   if (index === 0) return <GoldMedalIcon />;
   if (index === 1) return <SilverMedalIcon />;
   if (index === 2) return <BronzeMedalIcon />;
@@ -44,7 +43,7 @@ const getMedalIcon = (index: number) => {
   );
 };
 
-const calculateSavings = (currentPremium: number, baselinePremium: number) => {
+const calculateSavings = (currentPremium, baselinePremium) => {
   const monthlySavings =
     parseFloat(baselinePremium.toString()) -
     parseFloat(currentPremium.toString());
@@ -52,85 +51,20 @@ const calculateSavings = (currentPremium: number, baselinePremium: number) => {
   return { monthly: monthlySavings, annual: annualSavings };
 };
 
-interface ComparisonResultProps {
-  results: any[];
-  debugInfo: any;
-  searchCriteria: any;
-}
-
-const ComparisonResult: React.FC<ComparisonResultProps> = ({
-  results,
-  debugInfo,
-  searchCriteria,
-}) => {
-  const [selectedInsurance, setSelectedInsurance] = useState<any>(null);
+const ComparisonResult = ({ allPersonsResults, debugInfo, searchCriteria }) => {
+  const [selectedInsurance, setSelectedInsurance] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
-  const [showDetails, setShowDetails] = useState<{ [key: number]: boolean }>(
-    {}
-  );
-  const [allItems, setAllItems] = useState<any[]>([]);
+  const [showDetails, setShowDetails] = useState({});
+  const [selectedPerson, setSelectedPerson] = useState(0);
 
-  // Update allItems when results change
-  React.useEffect(() => {
-    // Reset states first
-    setAllItems([]);
-    setShowDetails({});
+  const toggleDetails = (index) => {
+    setShowDetails((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
 
-    let extractedItems = [];
-
-    if (results && results.length > 0) {
-      console.log("Results structure:", JSON.stringify(results, null, 2));
-
-      // Check if results[0] has the expected structure
-      if (
-        results[0].products &&
-        results[0].products[0] &&
-        results[0].products[0].items
-      ) {
-        extractedItems = results[0].products[0].items;
-        console.log("Found items in products[0].items");
-      } else if (Array.isArray(results[0])) {
-        // If results[0] is directly an array of items
-        extractedItems = results[0];
-        console.log("Found items as direct array in results[0]");
-      } else if (results[0].items) {
-        // If results[0] has items directly
-        extractedItems = results[0].items;
-        console.log("Found items directly in results[0].items");
-      } else {
-        // Try to find items anywhere in the structure
-        const findItems = (obj) => {
-          if (Array.isArray(obj)) {
-            return obj;
-          }
-          if (obj && typeof obj === "object") {
-            for (const key in obj) {
-              if (key === "items" && Array.isArray(obj[key])) {
-                return obj[key];
-              }
-              if (typeof obj[key] === "object") {
-                const found = findItems(obj[key]);
-                if (found) return found;
-              }
-            }
-          }
-          return null;
-        };
-
-        const foundItems = findItems(results);
-        if (foundItems) {
-          extractedItems = foundItems;
-          console.log("Found items by searching through structure");
-        }
-      }
-    }
-
-    console.log("Final extractedItems:", extractedItems);
-    console.log("ExtractedItems length:", extractedItems.length);
-    setAllItems(extractedItems);
-  }, [results]);
-
-  const handleSelectInsurance = (insurance: any) => {
+  const handleSelectInsurance = (insurance) => {
     setSelectedInsurance(insurance);
     setShowPopup(true);
   };
@@ -140,21 +74,43 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
     setSelectedInsurance(null);
   };
 
-  const toggleDetails = (index: number) => {
-    setShowDetails((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
-  };
+  // Get current person's results
+  const currentResults = allPersonsResults[selectedPerson] || { items: [], data: null };
+  const allItems = currentResults.items || [];
+  const resultData = currentResults.data;
 
   const baselinePremium =
     allItems.length > 0
       ? Math.max(...allItems.map((item) => parseFloat(item.premium || 0)))
       : 0;
 
+  // Check if there are multiple people
+  const hasMultiplePeople = allPersonsResults.length > 1;
+
   return (
     <>
       <div className="bg-gray-50 p-4 sm:p-6 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] w-full max-w-5xl font-sans">
+        {hasMultiplePeople && (
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+            {allPersonsResults.map((person, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  setSelectedPerson(index);
+                  setShowDetails({}); // Reset details when switching
+                }}
+                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition ${
+                  selectedPerson === index
+                    ? "bg-black text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+                }`}
+              >
+                {index === 0 ? "Hauptperson" : `Person ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 px-1 sm:px-2">
           <h2 className="text-lg sm:text-xl font-bold text-gray-800">
             Vergleichsergebnisse{" "}
@@ -182,7 +138,6 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center p-4 gap-4">
-                    {/* Left: Medal + Info */}
                     <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
                       {getMedalIcon(index)}
                       <div>
@@ -195,19 +150,17 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
                       </div>
                     </div>
 
-                    {/* Middle: Details badges (hidden on very small) */}
                     <div className="flex flex-wrap gap-2 text-xs sm:text-sm sm:flex-1 sm:justify-center">
                       <span className="px-2 py-1 bg-gray-100 rounded text-gray-600">
-                        Franchise: CHF {results[0]?.franchise || "300"}
+                        Franchise: CHF {resultData?.franchise || "300"}
                       </span>
                       <span className="px-2 py-1 bg-gray-100 rounded text-gray-600">
-                        {results[0]?.accidentCoverage
+                        {resultData?.accidentCoverage
                           ? "Mit Unfall"
                           : "Ohne Unfall"}
                       </span>
                     </div>
 
-                    {/* Right: Price + Buttons */}
                     <div className="flex flex-col items-start sm:items-end gap-2 sm:ml-auto">
                       <div className="text-left sm:text-right">
                         <div className="text-lg sm:text-xl font-bold text-gray-800">
@@ -238,7 +191,6 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
                     </div>
                   </div>
 
-                  {/* Expanded details */}
                   {showDetails[index] && (
                     <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 px-3 sm:px-4 pb-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs sm:text-sm">
@@ -253,7 +205,7 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
                             Tariff Type:
                           </span>
                           <p className="text-gray-800">
-                            {results[0]?.products?.[0]?.tariffType || "N/A"}
+                            {resultData?.tariffType || "N/A"}
                           </p>
                         </div>
                         <div>
@@ -269,7 +221,7 @@ const ComparisonResult: React.FC<ComparisonResultProps> = ({
                             Franchise:
                           </span>
                           <p className="text-gray-800">
-                            CHF {results[0]?.franchise || "300"}
+                            CHF {resultData?.franchise || "300"}
                           </p>
                         </div>
                       </div>

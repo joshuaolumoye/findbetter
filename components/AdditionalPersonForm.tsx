@@ -1,20 +1,15 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 
-const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPerson, regionData: externalRegionData }) => {
+const AdditionalPersonForm = ({ onResults, regionData, onRemove, personIndex }) => {
   const [form, setForm] = useState({
-    plz: "",
     geburtsjahr: "",
     franchise: "Franchise",
     unfalldeckung: "Unfalldeckung",
     aktuellesModell: "Aktuelles Modell",
     aktuelleKK: "Aktuelle KK",
-    newToSwitzerland: false,
-    entryDate: "",
   });
   const [loading, setLoading] = useState(false);
-  const [regionLoading, setRegionLoading] = useState(false);
-  const [regionData, setRegionData] = useState(null);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -25,32 +20,6 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
   };
 
   const age = calculateAge(form.geburtsjahr);
-
-  const fetchRegion = async () => {
-    setRegionLoading(true);
-    try {
-      const response = await fetch(`/api/address/plz/${form.plz}`);
-      const data = await response.json();
-      setRegionData(data[0]);
-      return data;
-    } catch (error) {
-      console.error("Error fetching region:", error);
-      setRegionData(null);
-      return null;
-    } finally {
-      setRegionLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    const fetchRegionData = async () => {
-      if (form.plz.length === 4) {
-        const region = await fetchRegion();
-        console.log("Region:", region);
-      }
-    };
-    fetchRegionData();
-  }, [form.plz]);
 
   useEffect(() => {
     if (age !== null) {
@@ -64,23 +33,8 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
   }, [age]);
 
   const handleChange = (e) => {
-    const { id, value, type, checked } = e.target;
-    let newValue = type === "checkbox" ? checked : value;
-
-    if (id === "newToSwitzerland" && !checked) {
-      setForm({ ...form, [id]: newValue, entryDate: "" });
-      if (validationErrors.entryDate) {
-        const newErrors = { ...validationErrors };
-        delete newErrors.entryDate;
-        setValidationErrors(newErrors);
-      }
-    } else {
-      setForm({ ...form, [id]: newValue });
-    }
-
-    if (id === "plz") {
-      setRegionData(null);
-    }
+    const { id, value } = e.target;
+    setForm({ ...form, [id]: value });
 
     if (validationErrors[id]) {
       setValidationErrors({ ...validationErrors, [id]: "" });
@@ -92,12 +46,6 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
 
   const validateForm = () => {
     const errors = {};
-
-    if (!form.plz) {
-      errors.plz = "Postleitzahl ist erforderlich";
-    } else if (!/^\d{4}$/.test(form.plz)) {
-      errors.plz = "Gültige Schweizer PLZ (4 Ziffern) eingeben";
-    }
 
     if (!form.geburtsjahr) {
       errors.geburtsjahr = "Geburtsjahr ist erforderlich";
@@ -123,26 +71,17 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
       errors.aktuelleKK = "Bitte Krankenkasse auswählen";
     }
 
-    if (form.newToSwitzerland) {
-      if (!form.entryDate) {
-        errors.entryDate = "Einreisedatum ist erforderlich";
-      } else {
-        const entryDate = new Date(form.entryDate);
-        const today = new Date();
-        if (entryDate > today) {
-          errors.entryDate = "Einreisedatum kann nicht in der Zukunft liegen";
-        }
-      }
-    }
-
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
+  const handleCalculate = async () => {
     if (!validateForm()) {
+      return;
+    }
+
+    if (!regionData) {
+      setError("Bitte geben Sie zuerst die Postleitzahl in der Hauptformular ein");
       return;
     }
 
@@ -150,10 +89,6 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
     setError("");
 
     try {
-      if (onSearchCriteria) {
-        onSearchCriteria(form, regionData);
-      }
-
       const getTariffCode = (model) => {
         switch (model) {
           case "Telmed":
@@ -195,33 +130,14 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
       }
 
       const results = data.results || data || [];
-
-      console.log("Results:", results);
-
-      onResults(results, 0);
+      onResults(results, personIndex);
     } catch (err) {
       console.error("API Error:", err);
       setError(`Fehler beim Laden der Daten: ${err.message}`);
-      onResults([], 0);
-      if (onDebugInfo) onDebugInfo(null);
+      onResults([], personIndex);
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillTestData = () => {
-    setForm({
-      plz: "8001",
-      geburtsjahr: "1990",
-      franchise: "300",
-      unfalldeckung: "Mit Unfalldeckung",
-      aktuellesModell: "Standard",
-      aktuelleKK: "0008",
-      newToSwitzerland: false,
-      entryDate: "",
-    });
-    setValidationErrors({});
-    setError("");
   };
 
   const insuranceCompanies = [
@@ -315,56 +231,23 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
   };
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] w-full max-w-sm flex-shrink-0">
+    <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] w-full max-w-sm flex-shrink-0 border-2 border-blue-100">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800">Ihre Angaben </h2>
-        {process.env.NODE_ENV === "development" && (
-          <button
-            type="button"
-            onClick={fillTestData}
-            className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200"
-          >
-            Test Data
-          </button>
-        )}
+        <h2 className="text-xl font-bold text-gray-800">
+          Weitere Person {personIndex + 1}
+        </h2>
+        <button
+          onClick={onRemove}
+          className="text-red-600 hover:text-red-800 font-medium text-sm"
+        >
+          Entfernen
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
+      <div className="space-y-4">
+        <div>
           <label
-            htmlFor="plz"
-            className="block text-sm font-medium text-gray-500 mb-2"
-          >
-            Postleitzahl *
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              id="plz"
-              value={regionData?.name ? regionData.name : form.plz}
-              onChange={handleChange}
-              placeholder="z.B. 8001"
-              maxLength="4"
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-                validationErrors.plz
-                  ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-                  : "border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500"
-              }`}
-            />
-            {regionLoading && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-blue-600"></div>
-              </div>
-            )}
-          </div>
-          {validationErrors.plz && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.plz}</p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label
-            htmlFor="geburtsjahr"
+            htmlFor={`geburtsjahr-${personIndex}`}
             className="block text-sm font-medium text-gray-500 mb-2"
           >
             Geburtsjahr *
@@ -390,9 +273,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           )}
         </div>
 
-        <div className="mb-4">
+        <div>
           <label
-            htmlFor="franchise"
+            htmlFor={`franchise-${personIndex}`}
             className="block text-sm font-medium text-gray-500 mb-2"
           >
             Franchise *
@@ -414,7 +297,6 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
               </option>
             ))}
           </select>
-
           {validationErrors.franchise && (
             <p className="mt-1 text-sm text-red-600">
               {validationErrors.franchise}
@@ -422,9 +304,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           )}
         </div>
 
-        <div className="mb-4">
+        <div>
           <label
-            htmlFor="unfalldeckung"
+            htmlFor={`unfalldeckung-${personIndex}`}
             className="block text-sm font-medium text-gray-500 mb-2"
           >
             Unfall *
@@ -449,9 +331,10 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
             </p>
           )}
         </div>
-        <div className="mb-6">
+
+        <div>
           <label
-            htmlFor="aktuelleKK"
+            htmlFor={`aktuelleKK-${personIndex}`}
             className="block text-sm font-medium text-gray-500 mb-2"
           >
             Aktuelle KVG *
@@ -479,9 +362,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           )}
         </div>
 
-        <div className="mb-4">
+        <div>
           <label
-            htmlFor="aktuellesModell"
+            htmlFor={`aktuellesModell-${personIndex}`}
             className="block text-sm font-medium text-gray-500 mb-2"
           >
             Arzt Modell *
@@ -509,70 +392,16 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           )}
         </div>
 
-        <div className="mb-4 flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="newToSwitzerland"
-            checked={form.newToSwitzerland}
-            onChange={handleChange}
-            className="h-5 w-5 text-black focus:ring-black border-gray-300 rounded-xl"
-          />
-          <label
-            htmlFor="newToSwitzerland"
-            className="text-gray-700 font-bold cursor-pointer"
-          >
-            Neu in der Schweiz
-          </label>
-        </div>
-
-        {form.newToSwitzerland && (
-          <div className="mb-4">
-            <label
-              htmlFor="entryDate"
-              className="block text-sm font-medium text-gray-500 mb-2"
-            >
-              Einreisedatum *
-            </label>
-            <input
-              type="date"
-              id="entryDate"
-              value={form.entryDate}
-              onChange={handleChange}
-              max={new Date().toISOString().split("T")[0]}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-                validationErrors.entryDate
-                  ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-                  : "border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500"
-              }`}
-            />
-            {validationErrors.entryDate && (
-              <p className="mt-1 text-sm text-red-600">
-                {validationErrors.entryDate}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="mb-6">
-          <button
-            type="button"
-            onClick={() => onAddPerson && onAddPerson()}
-            className="text-blue-600 hover:text-blue-800 font-medium text-sm underline"
-          >
-            + Für weitere Person berechnen
-          </button>
-        </div>
-
         <button
-          type="submit"
+          onClick={handleCalculate}
           className={`w-full font-semibold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-300 ${
             loading
               ? "bg-black text-white cursor-not-allowed"
-              : "bg-black hover:bg-black-50 text-white focus:ring-blue-500"
+              : "bg-black hover:bg-gray-800 text-white focus:ring-blue-500"
           }`}
           disabled={loading}
         >
-          {loading ? "Berechne..." : "Vergleich Starten"}
+          {loading ? "Berechne..." : "Berechnen"}
         </button>
 
         {error && (
@@ -580,9 +409,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
             {error}
           </div>
         )}
-      </form>
+      </div>
     </div>
   );
 };
 
-export default PremiumCalculator;
+export default AdditionalPersonForm;

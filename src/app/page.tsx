@@ -2,11 +2,11 @@
 import React, { useState } from "react";
 import PremiumCalculator from "../../components/PremiumCalculator";
 import ComparisonResult from "../../components/ComparisonResult";
+import AdditionalPersonForm from "../../components/AdditionalPersonForm";
 import FAQ from "../../components/faq";
 import Footer from "../../components/Footer";
 import Header from "../../components/Header";
 
-// Star Icon for Trustpilot ratings
 const StarIcon = () => (
   <svg
     className="w-5 h-5 text-white"
@@ -18,7 +18,6 @@ const StarIcon = () => (
   </svg>
 );
 
-// Green checkmark for Trustpilot section
 const GreenCheckIcon = () => (
   <svg
     width="20"
@@ -59,8 +58,75 @@ const TrustpilotRating = () => (
 );
 
 export default function Home() {
-  const [results, setResults] = useState([]);
-  const [debugInfo, setDebugInfo] = useState(null); // <-- Add this
+  const [allPersonsResults, setAllPersonsResults] = useState([
+    { items: [], data: null }
+  ]);
+  const [additionalPeople, setAdditionalPeople] = useState([]);
+  const [regionData, setRegionData] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
+
+  const extractItemsFromResults = (results) => {
+    let extractedItems = [];
+    if (results && results.length > 0) {
+      if (results[0].products && results[0].products[0] && results[0].products[0].items) {
+        extractedItems = results[0].products[0].items;
+      } else if (Array.isArray(results[0])) {
+        extractedItems = results[0];
+      } else if (results[0].items) {
+        extractedItems = results[0].items;
+      } else {
+        const findItems = (obj) => {
+          if (Array.isArray(obj)) return obj;
+          if (obj && typeof obj === "object") {
+            for (const key in obj) {
+              if (key === "items" && Array.isArray(obj[key])) {
+                return obj[key];
+              }
+              if (typeof obj[key] === "object") {
+                const found = findItems(obj[key]);
+                if (found) return found;
+              }
+            }
+          }
+          return null;
+        };
+        const foundItems = findItems(results);
+        if (foundItems) extractedItems = foundItems;
+      }
+    }
+    return extractedItems;
+  };
+
+  const handleResults = (results, personIndex) => {
+    console.log("Results for person", personIndex, results);
+    
+    const extractedItems = extractItemsFromResults(results);
+
+    setAllPersonsResults(prev => {
+      const updated = [...prev];
+      updated[personIndex] = {
+        items: extractedItems,
+        data: results[0] || null
+      };
+      return updated;
+    });
+  };
+
+  const handleSearchCriteria = (criteria, region) => {
+    console.log("Search criteria:", criteria);
+    setRegionData(region);
+  };
+
+  const handleAddPerson = () => {
+    const newIndex = additionalPeople.length + 1;
+    setAdditionalPeople([...additionalPeople, newIndex]);
+    setAllPersonsResults(prev => [...prev, { items: [], data: null }]);
+  };
+
+  const handleRemovePerson = (indexToRemove) => {
+    setAdditionalPeople(prev => prev.filter((_, i) => i !== indexToRemove));
+    setAllPersonsResults(prev => prev.filter((_, i) => i !== indexToRemove + 1));
+  };
 
   return (
     <main className="bg-white min-h-screen font-sans text-gray-900">
@@ -96,18 +162,37 @@ export default function Home() {
 
       <div className="container mx-auto px-6 pb-20">
         <div className="flex flex-col lg:flex-row justify-center items-start gap-8 relative">
-          <PremiumCalculator
-            onResults={setResults}
-            onDebugInfo={setDebugInfo}
-          />{" "}
-          {/* <-- Pass handler */}
-          <ComparisonResult
-            key={JSON.stringify(results)}
-            results={results}
-            debugInfo={debugInfo}
-          />
+          {/* Left side - Forms */}
+          <div className="space-y-6 lg:w-auto flex-shrink-0">
+            <PremiumCalculator
+              onResults={handleResults}
+              onDebugInfo={setDebugInfo}
+              onSearchCriteria={handleSearchCriteria}
+              onAddPerson={handleAddPerson}
+              regionData={regionData}
+            />
+
+            {additionalPeople.map((person, index) => (
+              <AdditionalPersonForm
+                key={index}
+                personIndex={index + 1}
+                onResults={handleResults}
+                regionData={regionData}
+                onRemove={() => handleRemovePerson(index)}
+              />
+            ))}
+          </div>
+
+          {/* Right side - Results */}
+          <div className="lg:flex-1">
+            <ComparisonResult
+              allPersonsResults={allPersonsResults}
+              debugInfo={debugInfo}
+            />
+          </div>
         </div>
       </div>
+      
       <FAQ />
       <Footer />
     </main>
