@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
   const [form, setForm] = useState({
@@ -12,6 +12,8 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
     newToSwitzerland: false,
   });
   const [loading, setLoading] = useState(false);
+  const [regionLoading, setRegionLoading] = useState(false);
+  const [regionData, setRegionData] = useState(null);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -30,11 +32,42 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
 
   const age = calculateAge(form.geburtsdatum); // 👈 compute here for use in JSX
 
+  const fetchRegion = async () => {
+    setRegionLoading(true);
+    try {
+      const response = await fetch(`/api/address/plz/${form.plz}`);
+      const data = await response.json();
+      setRegionData(data[0]);
+      return data;
+    } catch (error) {
+      console.error("Error fetching region:", error);
+      setRegionData(null);
+      return null;
+    } finally {
+      setRegionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchRegionData = async () => {
+      if (form.plz.length === 4) {
+        const region = await fetchRegion();
+        console.log("Region:", region);
+      }
+    };
+    fetchRegionData();
+  }, [form.plz, form.geburtsdatum]);
+
   const handleChange = (e) => {
     const { id, value, type, checked } = e.target;
-    const newValue = type === "checkbox" ? checked : value;
+    let newValue = type === "checkbox" ? checked : value;
 
     setForm({ ...form, [id]: newValue });
+
+    // Clear region data when PLZ changes
+    if (id === "plz") {
+      setRegionData(null);
+    }
 
     if (validationErrors[id]) {
       setValidationErrors({ ...validationErrors, [id]: "" });
@@ -82,47 +115,68 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setLoading(true);
     setError("");
-    
+
     try {
       // Pass search criteria to parent component
       if (onSearchCriteria) {
         onSearchCriteria(form);
       }
-      
-      const response = await fetch("/api/premiums", {
+
+      // Map doctor model to tariff codes
+      const getTariffCode = (model) => {
+        switch (model) {
+          case "Telmed":
+            return "TAR-DIV";
+          case "HMO":
+            return "TAR-HMO";
+          case "Hausarzt":
+            return "TAR-HAM";
+          case "Standard":
+            return "TAR-BASE";
+          default:
+            return "TAR-BASE";
+        }
+      };
+
+      // Prepare the request body for the comparison API
+      const requestBody = {
+        insurerId: form.aktuelleKK,
+        regionId: regionData?.regionId,
+        birthYear: new Date(form.geburtsdatum).getFullYear(),
+        cantonId: regionData?.cantonId,
+        accidentCoverage: form.unfalldeckung === "Mit Unfalldeckung",
+        franchise: form.franchise,
+        tariffType: getTariffCode(form.aktuellesModell),
+      };
+
+      const response = await fetch("/api/comparison", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          Accept: "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(requestBody),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || `HTTP Error: ${response.status}`);
       }
-      
-      const results = data.results || [];
-      
-      if (data.debug && onDebugInfo) {
-        onDebugInfo(data.debug);
-      }
-      
+
+      // Handle the response - adjust based on the actual API response structure
+      const results = data.results || data || [];
+
+      console.log("Results:", results);
+
       onResults(results);
-      
-      if (results.length === 0) {
-        setError("Keine Versicherungen für Ihre Kriterien gefunden. Versuchen Sie andere Filter.");
-      }
-      
     } catch (err) {
       console.error("API Error:", err);
       setError(`Fehler beim Laden der Daten: ${err.message}`);
@@ -140,24 +194,91 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
       franchise: "300",
       unfalldeckung: "Mit Unfalldeckung",
       aktuellesModell: "Standard",
-      aktuelleKK: "CSS",
-      newToSwitzerland: false
+      aktuelleKK: "0008",
+      newToSwitzerland: false,
     });
     setValidationErrors({});
     setError("");
   };
 
+  // const insuranceCompanies = [
+  //   "Aktuelle KK",
+  //   "Helsana",
+  //   "CSS",
+  //   "Swica",
+  //   "Concordia",
+  //   "Sanitas",
+  //   "KPT",
+  //   "Visana",
+  //   "Groupe Mutuel",
+  //   "GALENOS",
+  //   "Assura",
+  //   "Sympany",
+  //   "ÖKK",
+  //   "EGK-Gesundheitskasse",
+  //   "Atupri",
+  // ];
+
   const insuranceCompanies = [
-    "Aktuelle KK", "Helsana", "CSS", "Swica", "Concordia", "Sanitas",
-    "KPT", "Visana", "Groupe Mutuel", "GALENOS", "Assura", "Sympany",
-    "ÖKK", "EGK-Gesundheitskasse", "Atupri",
+    { id: "0", name: "None" },
+    { id: "1560", name: "Agrisano" },
+    { id: "1507", name: "AMB Assurances SA" },
+    { id: "0032", name: "Aquilana" },
+    { id: "1569", name: "Arcosana (CSS)" },
+    { id: "1542", name: "Assura" },
+    { id: "0312", name: "Atupri" },
+    { id: "0343", name: "Avenir (Groupe Mutuel)" },
+    { id: "1322", name: "Birchmeier" },
+    { id: "1575", name: "Compact" },
+    { id: "0290", name: "Concordia" },
+    { id: "0008", name: "CSS" },
+    { id: "0774", name: "Easy Sana (Groupe Mutuel)" },
+    { id: "0881", name: "EGK" },
+    { id: "0134", name: "Einsiedler" },
+    { id: "1386", name: "Galenos" },
+    { id: "0780", name: "Glarner" },
+    { id: "1562", name: "Helsana" },
+    { id: "1142", name: "Ingenbohl" },
+    { id: "1529", name: "Intras (CSS)" },
+    { id: "0829", name: "KluG" },
+    { id: "0762", name: "Kolping (Sympany)" },
+    { id: "0376", name: "KPT" },
+    { id: "0558", name: "KVF" },
+    { id: "0820", name: "Lumneziana" },
+    { id: "0360", name: "Luzerner Hinterland" },
+    { id: "0057", name: "Moove (Sympany)" },
+    { id: "1479", name: "Mutuel" },
+    { id: "0455", name: "ÖKK" },
+    { id: "1535", name: "Philos (Groupe Mutuel)" },
+    { id: "1998", name: "Prezisa" },
+    { id: "0994", name: "Progrès" },
+    { id: "0182", name: "Provita" },
+    { id: "1401", name: "Rhenusana" },
+    { id: "1568", name: "sana24" },
+    { id: "1577", name: "Sanagate (CSS)" },
+    { id: "0901", name: "Sanavals" },
+    { id: "1509", name: "Sanitas" },
+    { id: "0923", name: "SLKK" },
+    { id: "0941", name: "Sodalis" },
+    { id: "0246", name: "Steffisburg" },
+    { id: "1331", name: "Stoffel Mels" },
+    { id: "0194", name: "Sumiswalder" },
+    { id: "0062", name: "Supra" },
+    { id: "1384", name: "Swica" },
+    { id: "0509", name: "Sympany" },
+    { id: "1113", name: "Vallée d’Entremont" },
+    { id: "1555", name: "Visana" },
+    { id: "1040", name: "Visperterminen" },
+    { id: "0966", name: "Vita" },
+    { id: "1570", name: "Vivacare" },
+    { id: "1318", name: "Wädenswil" },
   ];
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] w-full max-w-sm flex-shrink-0">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-800">Ihre Angaben </h2>
-        {process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === "development" && (
           <button
             type="button"
             onClick={fillTestData}
@@ -167,32 +288,45 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
           </button>
         )}
       </div>
-      
+
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
-          <label htmlFor="plz" className="block text-sm font-medium text-gray-500 mb-2">
+          <label
+            htmlFor="plz"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
             Postleitzahl *
           </label>
-          <input 
-            type="text" 
-            id="plz" 
-            value={form.plz} 
-            onChange={handleChange} 
-            placeholder="z.B. 8001"
-            maxLength="4"
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.plz 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500'
-            }`}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              id="plz"
+              value={regionData?.name ? regionData.name : form.plz}
+              onChange={handleChange}
+              placeholder="z.B. 8001"
+              maxLength="4"
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+                validationErrors.plz
+                  ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                  : "border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500"
+              }`}
+            />
+            {regionLoading && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-blue-600"></div>
+              </div>
+            )}
+          </div>
           {validationErrors.plz && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.plz}</p>
           )}
         </div>
 
         <div className="mb-4">
-          <label htmlFor="geburtsdatum" className="block text-sm font-medium text-gray-500 mb-2">
+          <label
+            htmlFor="geburtsdatum"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
             Geburtsdatum *
           </label>
           <input
@@ -200,91 +334,102 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
             id="geburtsdatum"
             value={form.geburtsdatum}
             onChange={handleChange}
-            max={new Date().toISOString().split('T')[0]}
+            max={new Date().toISOString().split("T")[0]}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.geburtsdatum 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500'
+              validationErrors.geburtsdatum
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 focus:ring-blue-500 focus:border-blue-500"
             }`}
           />
           {validationErrors.geburtsdatum && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.geburtsdatum}</p>
+            <p className="mt-1 text-sm text-red-600">
+              {validationErrors.geburtsdatum}
+            </p>
           )}
         </div>
 
         <div className="mb-4">
-  <label htmlFor="franchise" className="block text-sm font-medium text-gray-500 mb-2">
-    Franchise *
-  </label>
-  <select
-    id="franchise"
-    value={form.franchise}
-    onChange={handleChange}
-    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-      validationErrors.franchise
-        ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-        : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
-    }`}
-  >
-    <option value="Franchise">Franchise auswählen</option>
+          <label
+            htmlFor="franchise"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
+            Franchise *
+          </label>
+          <select
+            id="franchise"
+            value={form.franchise}
+            onChange={handleChange}
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+              validationErrors.franchise
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
+            }`}
+          >
+            <option value="Franchise">Franchise auswählen</option>
 
-    {/* Always available */}
-    <option value="100">CHF 100 (Minimum)</option>
-    <option value="200">CHF 200</option>
-    <option value="300">CHF 300</option>
-    <option value="400">CHF 400</option>
-    <option value="500">CHF 500</option>
-    <option value="600">CHF 600</option>
+            {/* Available franchise options */}
+            <option value="300">CHF 300</option>
+            <option value="500">CHF 500</option>
+            <option
+              value="1000"
+              disabled={age !== null && age < 18}
+              title={
+                age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""
+              }
+            >
+              CHF 1'000
+            </option>
+            <option
+              value="1500"
+              disabled={age !== null && age < 18}
+              title={
+                age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""
+              }
+            >
+              CHF 1'500
+            </option>
+            <option
+              value="2000"
+              disabled={age !== null && age < 18}
+              title={
+                age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""
+              }
+            >
+              CHF 2'000
+            </option>
+            <option
+              value="2500"
+              disabled={age !== null && age < 18}
+              title={
+                age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""
+              }
+            >
+              CHF 2'500
+            </option>
+          </select>
 
-    {/* Restricted only if under 18 */}
-    <option
-      value="1000"
-      disabled={age !== null && age < 18}
-      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-    >
-      CHF 1'000
-    </option>
-    <option
-      value="1500"
-      disabled={age !== null && age < 18}
-      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-    >
-      CHF 1'500
-    </option>
-    <option
-      value="2000"
-      disabled={age !== null && age < 18}
-      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-    >
-      CHF 2'000
-    </option>
-    <option
-      value="2500"
-      disabled={age !== null && age < 18}
-      title={age !== null && age < 18 ? "Unter 18 Jahren nicht erlaubt" : ""}
-    >
-      CHF 2'500 (Maximum)
-    </option>
-  </select>
-
-  {validationErrors.franchise && (
-    <p className="mt-1 text-sm text-red-600">{validationErrors.franchise}</p>
-  )}
-</div>
-
+          {validationErrors.franchise && (
+            <p className="mt-1 text-sm text-red-600">
+              {validationErrors.franchise}
+            </p>
+          )}
+        </div>
 
         <div className="mb-4">
-          <label htmlFor="unfalldeckung" className="block text-sm font-medium text-gray-500 mb-2">
+          <label
+            htmlFor="unfalldeckung"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
             Unfall *
           </label>
-          <select 
-            id="unfalldeckung" 
-            value={form.unfalldeckung} 
-            onChange={handleChange} 
+          <select
+            id="unfalldeckung"
+            value={form.unfalldeckung}
+            onChange={handleChange}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.unfalldeckung 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
+              validationErrors.unfalldeckung
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
             }`}
           >
             <option value="Unfalldeckung">Unfalldeckung auswählen</option>
@@ -292,46 +437,56 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
             <option value="Ohne Unfalldeckung">Ohne Unfalldeckung</option>
           </select>
           {validationErrors.unfalldeckung && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.unfalldeckung}</p>
+            <p className="mt-1 text-sm text-red-600">
+              {validationErrors.unfalldeckung}
+            </p>
           )}
         </div>
         <div className="mb-6">
-          <label htmlFor="aktuelleKK" className="block text-sm font-medium text-gray-500 mb-2">
-           Aktuelle KVG *
+          <label
+            htmlFor="aktuelleKK"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
+            Aktuelle KVG *
           </label>
-          <select 
-            id="aktuelleKK" 
-            value={form.aktuelleKK} 
-            onChange={handleChange} 
+          <select
+            id="aktuelleKK"
+            value={form.aktuelleKK}
+            onChange={handleChange}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.aktuelleKK 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
+              validationErrors.aktuelleKK
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
             }`}
           >
             {insuranceCompanies.map((company) => (
-              <option key={company} value={company}>
-                {company}
+              <option key={company.id} value={company.id}>
+                {company.name}
               </option>
             ))}
           </select>
           {validationErrors.aktuelleKK && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.aktuelleKK}</p>
+            <p className="mt-1 text-sm text-red-600">
+              {validationErrors.aktuelleKK}
+            </p>
           )}
         </div>
 
         <div className="mb-4">
-          <label htmlFor="aktuellesModell" className="block text-sm font-medium text-gray-500 mb-2">
-             Arzt Modell *
+          <label
+            htmlFor="aktuellesModell"
+            className="block text-sm font-medium text-gray-500 mb-2"
+          >
+            Arzt Modell *
           </label>
-          <select 
-            id="aktuellesModell" 
-            value={form.aktuellesModell} 
-            onChange={handleChange} 
+          <select
+            id="aktuellesModell"
+            value={form.aktuellesModell}
+            onChange={handleChange}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.aktuellesModell 
-                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                : 'border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500'
+              validationErrors.aktuellesModell
+                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
             }`}
           >
             <option value="Aktuelles Modell">Modell auswählen</option>
@@ -341,7 +496,9 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
             <option value="Telmed">Telmed (Telemedizin)</option>
           </select>
           {validationErrors.aktuellesModell && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.aktuellesModell}</p>
+            <p className="mt-1 text-sm text-red-600">
+              {validationErrors.aktuellesModell}
+            </p>
           )}
         </div>
 
@@ -353,16 +510,20 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria }) => {
             onChange={handleChange}
             className="h-5 w-5 text-black focus:ring-black border-gray-300 rounded-xl"
           />
-          <label htmlFor="newToSwitzerland" className="text-gray-700 font-bold cursor-pointer">
-            Neu in der Schweiz 
+          <label
+            htmlFor="newToSwitzerland"
+            className="text-gray-700 font-bold cursor-pointer"
+          >
+            Neu in der Schweiz
           </label>
         </div>
 
         <button
           type="submit"
           className={`w-full font-semibold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-300 ${
-            loading ? "bg-black text-white cursor-not-allowed"
-            : "bg-black hover:bg-black-50 text-white focus:ring-blue-500"
+            loading
+              ? "bg-black text-white cursor-not-allowed"
+              : "bg-black hover:bg-black-50 text-white focus:ring-blue-500"
           }`}
           disabled={loading}
         >
