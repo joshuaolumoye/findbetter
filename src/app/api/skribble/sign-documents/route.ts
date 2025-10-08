@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 // Skribble configuration for production
 const skribbleConfig = {
   apiKey: process.env.SKRIBBLE_API_KEY || '',
-  baseUrl: process.env.SKRIBBLE_BASE_URL || 'https://api.skribble.de',
+  baseUrl: process.env.SKRIBBLE_BASE_URL || 'https://api.skribble.com',
   environment: process.env.NODE_ENV === 'production' ? 'production' as const : 'sandbox' as const,
   webhookSecret: process.env.SKRIBBLE_WEBHOOK_SECRET || ''
 };

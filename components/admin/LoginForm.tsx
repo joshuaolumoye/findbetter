@@ -72,7 +72,7 @@ export default function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              placeholder="admin@insurance.com"
+              placeholder="Enter your email"
               required
               disabled={isLoading}
             />
@@ -116,12 +116,6 @@ export default function LoginForm() {
             )}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500">
-            Demo credentials: admin@insurance.com / admin123
-          </p>
-        </div>
       </div>
     </div>
   );

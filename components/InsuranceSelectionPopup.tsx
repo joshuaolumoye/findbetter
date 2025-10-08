@@ -1,49 +1,62 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Camera, CheckCircle, X, AlertCircle, FileText, PenTool } from "lucide-react";
+import DualIDUpload from './DualIDUpload'; 
 
-interface InsuranceSelectionPopupProps {
-  selectedInsurance: any;
-  searchCriteria: any;
-  onClose: () => void;
-  isOpen: boolean;
-}
-
-const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
+const InsuranceSelectionPopup = ({
   selectedInsurance,
   searchCriteria,
   onClose,
   isOpen
 }) => {
   const [formData, setFormData] = useState({
-    salutation: 'Herr',
-    firstName: '',
-    lastName: '',
-    birthDate: searchCriteria?.geburtsdatum || '',
-    phone: '',
-    email: '',
-    address: '',
-    nationality: '',
-    ahvNumber: '',
-    currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
-    currentPolicyNumber: '',
-    insuranceStartDate: '',
-    informationArt45: false,
-    agbAccepted: false,
-    mandateAccepted: false,
-    terminationAuthority: false,
-    consultationInterest: false
-  });
+  salutation: 'Herr',
+  firstName: '',
+  lastName: '',
+  birthDate: searchCriteria?.geburtsdatum || '',
+  phone: '',
+  email: '',
+  address: '',
+  nationality: '',
+  ahvNumber: '',
+  currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
+  currentPolicyNumber: '',
+  insuranceStartDate: searchCriteria?.newToSwitzerland && searchCriteria?.entryDate 
+    ? searchCriteria.entryDate 
+    : '2026-01-01',
+  idDocumentFront: null,
+  idDocumentBack: null,
+  idDocumentFrontBase64: null,
+  idDocumentBackBase64: null,
+  informationArt45: false,
+  agbAccepted: false,
+  mandateAccepted: false,
+  terminationAuthority: false,
+  consultationInterest: false
+});
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
-  const [currentStep, setCurrentStep] = useState<'form' | 'processing' | 'redirect'>('form');
+  const [validationErrors, setValidationErrors] = useState({});
+  const [currentStep, setCurrentStep] = useState('form');
+
+  useEffect(() => {
+    if (searchCriteria?.newToSwitzerland && searchCriteria?.entryDate) {
+      setFormData(prev => ({
+        ...prev,
+        insuranceStartDate: searchCriteria.entryDate
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        insuranceStartDate: '2026-01-01'
+      }));
+    }
+  }, [searchCriteria?.newToSwitzerland, searchCriteria?.entryDate]);
 
   const validateForm = () => {
-    const errors: {[key: string]: string} = {};
+    const errors = {};
     const requiredFields = [
       { key: 'firstName', label: 'Vorname' },
       { key: 'lastName', label: 'Nachname' },
@@ -54,24 +67,27 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
       { key: 'currentInsurer', label: 'Aktuelle Krankenversicherung' }
     ];
 
-    // Check required fields
+    // Add AHV validation only if NOT new to Switzerland
+    if (!searchCriteria?.newToSwitzerland) {
+      if (!formData.ahvNumber?.trim()) {
+        errors.ahvNumber = 'AHV-Nummer ist erforderlich';
+      }
+    }
+
     for (const field of requiredFields) {
       if (!formData[field.key]?.trim()) {
         errors[field.key] = `${field.label} ist erforderlich`;
       }
     }
 
-    // Email validation
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Bitte geben Sie eine gültige E-Mail-Adresse ein';
     }
 
-    // Phone validation
     if (formData.phone && !/^[\+]?[0-9\s\-\(\)]{7,}$/.test(formData.phone)) {
       errors.phone = 'Bitte geben Sie eine gültige Telefonnummer ein';
     }
 
-    // Birth date validation
     if (formData.birthDate) {
       const birthDate = new Date(formData.birthDate);
       const today = new Date();
@@ -86,7 +102,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
       }
     }
 
-    // Required checkboxes
     const requiredCheckboxes = [
       { key: 'informationArt45', label: 'Information nach Art. 45' },
       { key: 'agbAccepted', label: 'AGB' },
@@ -104,16 +119,15 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     return Object.keys(errors).length === 0;
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e) => {
     const { id, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
+    const checked = e.target.checked;
     
     setFormData(prev => ({
       ...prev,
       [id]: type === 'checkbox' ? checked : value
     }));
 
-    // Clear validation error when user starts typing
     if (validationErrors[id]) {
       setValidationErrors(prev => ({ ...prev, [id]: '' }));
     }
@@ -123,47 +137,17 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      setSubmitError('Datei ist zu groß. Maximum 5MB erlaubt.');
-      return;
-    }
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-      setSubmitError('Nur JPEG, PNG oder PDF Dateien sind erlaubt.');
-      return;
-    }
-
-    setUploadedFile(file);
-    setSubmitError('');
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
-
-  const extractPostalCode = (address: string, fallback: string): string => {
+  const extractPostalCode = (address, fallback) => {
     const match = address.match(/\b\d{4}\b/);
     return match ? match[0] : fallback;
   };
 
-  const extractCity = (address: string): string => {
+  const extractCity = (address) => {
     const match = address.match(/\b\d{4}\s+(.+)$/);
     return match ? match[1].trim() : '';
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -176,176 +160,151 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     setCurrentStep('processing');
 
     try {
-      // Get postal code from search criteria or extract from address
       const postalCode = searchCriteria?.plz || extractPostalCode(formData.address, '8001');
       const city = extractCity(formData.address);
 
-      console.log('PRODUCTION: Starting user registration and document creation...');
+      console.log('STEP 1: Saving user to database first...');
 
-      // Convert file to base64 if uploaded
-      let idDocumentBase64 = null;
-      if (uploadedFile) {
-        try {
-          idDocumentBase64 = await fileToBase64(uploadedFile);
-        } catch (fileError) {
-          console.warn('File conversion failed:', fileError);
-        }
-      }
-
-      // Structure the request body correctly for the API validation
-      const requestBody = {
-        userData: {
-          salutation: formData.salutation,
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          email: formData.email.trim().toLowerCase(),
-          phone: formData.phone.trim(),
-          birthDate: formData.birthDate,
-          address: formData.address.trim(),
-          postalCode: postalCode,
-          city: city || '',
-          nationality: formData.nationality.trim() || 'swiss',
-          ahvNumber: formData.ahvNumber.trim() || null,
-          currentInsurer: formData.currentInsurer,
-          currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
-          insuranceStartDate: formData.insuranceStartDate || '01.01.2025',
-          interestedInConsultation: formData.consultationInterest
-        },
-
-        selectedInsurance: {
-          insurer: selectedInsurance?.Insurer || selectedInsurance?.Versicherer || 'Unknown',
-          tariffName: selectedInsurance?.['Tariff name'] || selectedInsurance?.Modell || 'Standard',
-          premium: parseFloat(String(selectedInsurance?.Bonus || selectedInsurance?.Praemie || 0)) || 0,
-          franchise: String(selectedInsurance?.Franchise || searchCriteria?.franchise || '300'),
-          accidentInclusion: selectedInsurance?.['Accident Inclusion'] || selectedInsurance?.Unfalldeckung || searchCriteria?.unfalldeckung || 'Mit Unfalldeckung',
-          ageGroup: selectedInsurance?.['Age group'] || selectedInsurance?.AgeRange || 'Adult',
-          region: selectedInsurance?.Region || selectedInsurance?.Kanton || 'CH',
-          fiscalYear: String(selectedInsurance?.['Fiscal year'] || selectedInsurance?.Jahr || '2025')
-        },
-
+      // STEP 1: Save user to database FIRST
+      const userPayload = {
+        salutation: formData.salutation,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        birthDate: formData.birthDate,
+        address: formData.address.trim(),
+        postalCode: postalCode,
+        city: city || '',
+        nationality: formData.nationality.trim() || 'swiss',
+        ahvNumber: searchCriteria?.newToSwitzerland ? null : (formData.ahvNumber.trim() || null),
+        currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
+        insuranceStartDate: formData.insuranceStartDate || '01.01.2026',
+        interestedInConsultation: formData.consultationInterest,
+        
         searchCriteria: {
           postalCode: searchCriteria?.plz || postalCode,
           birthDate: searchCriteria?.geburtsdatum || formData.birthDate,
           franchise: searchCriteria?.franchise || '300',
           accidentCoverage: searchCriteria?.unfalldeckung || 'Mit Unfalldeckung',
           currentModel: searchCriteria?.aktuellesModell || 'Standard',
-          currentInsurer: formData.currentInsurer || searchCriteria?.aktuelleKK,
+          currentInsurer: formData.currentInsurer,
           newToSwitzerland: searchCriteria?.newToSwitzerland || false
         },
-
+        
+        selectedInsurance: {
+          insurer: selectedInsurance?.Insurer || selectedInsurance?.insurerName || 'Unknown',
+          tariffName: selectedInsurance?.['Tariff name'] || selectedInsurance?.tariff || 'Standard',
+          premium: parseFloat(String(selectedInsurance?.premium || selectedInsurance?.Praemie || 0)) || 0,
+          franchise: String(selectedInsurance?.Franchise || searchCriteria?.franchise || '300'),
+          accidentInclusion: selectedInsurance?.['Accident Inclusion'] || searchCriteria?.unfalldeckung || 'Mit Unfalldeckung',
+          ageGroup: selectedInsurance?.['Age group'] || 'Adult',
+          region: selectedInsurance?.Region || 'CH',
+          fiscalYear: String(selectedInsurance?.['Fiscal year'] || '2025')
+        },
+        
         compliance: {
           informationArt45: formData.informationArt45,
           agbAccepted: formData.agbAccepted,
           mandateAccepted: formData.mandateAccepted,
           terminationAuthority: formData.terminationAuthority,
           consultationInterest: formData.consultationInterest
-        },
-
-        idDocument: idDocumentBase64
+        }
       };
 
-      console.log('PRODUCTION: Submitting with correct structure...', {
-        hasUserData: !!requestBody.userData,
-        hasCurrentInsurer: !!requestBody.userData.currentInsurer,
-        currentInsurer: requestBody.userData.currentInsurer,
-        hasSelectedInsurance: !!requestBody.selectedInsurance,
-        selectedInsurer: requestBody.selectedInsurance.insurer
-      });
-
-      // Create user and documents in one call
-      const response = await fetch('/api/skribble/create-documents', {
+      // Save user to database
+      const userResponse = await fetch('/api/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(60000)
+        body: JSON.stringify(userPayload),
       });
 
-      let result;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType && contentType.includes('application/json')) {
-        result = await response.json();
-      } else {
-        const textResult = await response.text();
-        console.error('Non-JSON response from Skribble API:', textResult);
-        throw new Error('Server returned invalid response format');
+      if (!userResponse.ok) {
+        const errorData = await userResponse.json();
+        throw new Error(errorData.error || 'Failed to save user data');
       }
 
-      if (!response.ok) {
-        console.error('Skribble API Error Response:', result);
-        throw new Error(result?.error || result?.message || `Server error: ${response.status}`);
-      }
+      const { userId } = await userResponse.json();
+      console.log('✅ User saved to database with ID:', userId);
 
-      console.log('PRODUCTION: Documents created successfully:', result);
-
-      // Check if we have success response (no signingUrl means redirect to success page)
-      if (result.success && !result.signingUrl) {
-        // Store session info for success page
-        sessionStorage.setItem('skribble_session', JSON.stringify({
-          sessionId: result.sessionId,
-          documentIds: [result.cancellationDocumentId, result.applicationDocumentId],
-          currentInsurer: result.currentInsurer,
-          selectedInsurer: result.selectedInsurer,
-          userEmail: result.userEmail,
-          timestamp: Date.now()
-        }));
-
-        console.log('PRODUCTION: Redirecting to success page...');
+      // STEP 2: Upload ID documents if provided
+      if (formData.idDocumentFrontBase64 || formData.idDocumentBackBase64) {
+        console.log('STEP 2: Uploading ID documents...');
         
-        // Small delay to ensure user sees the processing message
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          const uploadResponse = await fetch('/api/upload/dual-documents', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              frontImage: formData.idDocumentFrontBase64,
+              backImage: formData.idDocumentBackBase64,
+              userId: userId.toString()
+            })
+          });
 
-        // Redirect to success page
-        window.location.href = '/success';
-        return;
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json();
+            console.log('✅ ID documents uploaded:', uploadResult.files);
+          } else {
+            console.warn('⚠️ ID document upload failed (non-blocking)');
+          }
+        } catch (uploadError) {
+          console.warn('⚠️ ID document upload error (non-blocking):', uploadError);
+        }
       }
 
-      // Original Skribble redirect logic (if signingUrl is provided)
-      if (result.signingUrl) {
-        // Store signing session info for tracking
-        sessionStorage.setItem('skribble_session', JSON.stringify({
-          userId: result.userId,
-          sessionId: result.sessionId,
-          documentIds: [result.documentId, result.applicationDocumentId],
-          timestamp: Date.now(),
-          environment: result.compliance?.environment || 'production'
-        }));
+      // STEP 3: Process Skribble documents
+      console.log('STEP 3: Processing Skribble documents...');
+      
+      const skribblePayload = {
+        userId: userId,
+        userData: userPayload,
+        selectedInsurance: userPayload.selectedInsurance,
+        searchCriteria: userPayload.searchCriteria,
+        compliance: userPayload.compliance
+      };
 
-        console.log('PRODUCTION: Redirecting to Skribble signing URL:', result.signingUrl);
+      const skribbleResponse = await fetch('/api/skribble/create-documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(skribblePayload),
+      });
 
-        // Small delay to ensure user sees the redirect message
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Redirect to Skribble
-        window.location.href = result.signingUrl;
-        return;
-      }else {
-          // If neither success nor signingUrl, throw error
-          throw new Error('No valid response received from service');
+      if (!skribbleResponse.ok) {
+        const errorData = await skribbleResponse.json();
+        throw new Error(errorData.error || 'Failed to create documents');
       }
 
-    } catch (error: any) {
-      console.error('PRODUCTION: Submission error:', error);
+      const result = await skribbleResponse.json();
+      console.log('✅ Documents created successfully:', result);
+
+      // Store session data
+      sessionStorage.setItem('skribble_session', JSON.stringify({
+        userId: userId,
+        sessionId: result.sessionId,
+        documentIds: [result.documentId, result.applicationDocumentId],
+        timestamp: Date.now()
+      }));
+
+      // Redirect to success page
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      window.location.href = '/success';
+
+    } catch (error) {
+      console.error('❌ Submission error:', error);
       
-      let errorMessage = 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
+      let errorMessage = 'Ein unerwarteter Fehler ist aufgetreten.';
       
-      if (error.name === 'AbortError') {
-        errorMessage = 'Anfrage-Timeout. Bitte versuchen Sie es erneut.';
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+      if (error.message.includes('existiert bereits')) {
+        errorMessage = 'Ein Benutzer mit dieser E-Mail existiert bereits.';
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Anfrage-Timeout. Bitte versuchen Sie es erneut.';
-      } else if (error.message.includes('existiert bereits') || error.message.includes('USER_EXISTS')) {
-        errorMessage = 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.';
-      } else if (error.message.includes('validation') || error.message.includes('VALIDATION_ERROR')) {
-        errorMessage = 'Pflichtfelder fehlen oder sind ungültig. Bitte überprüfen Sie Ihre Eingaben.';
-      } else if (error.message.includes('SKRIBBLE_ERROR')) {
-        errorMessage = 'Der Signaturdienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.';
-      } else if (error.message.includes('DATABASE_ERROR')) {
-        errorMessage = 'Datenbankverbindungsfehler. Bitte versuchen Sie es erneut.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -372,13 +331,16 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
         currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
         currentPolicyNumber: '',
         insuranceStartDate: '',
+        idDocumentFront: null,
+        idDocumentBack: null,
+        idDocumentFrontBase64: null,
+        idDocumentBackBase64: null,
         informationArt45: false,
         agbAccepted: false,
         mandateAccepted: false,
         terminationAuthority: false,
         consultationInterest: false
       });
-      setUploadedFile(null);
       setSubmitSuccess(false);
       setValidationErrors({});
       setSubmitError('');
@@ -387,7 +349,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
     onClose();
   };
 
-  // Swiss insurance companies for dropdown
   const swissInsuranceCompanies = [
     "CSS Versicherung AG",
     "Helsana Versicherungen AG", 
@@ -407,6 +368,8 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
   ];
 
   if (!isOpen) return null;
+
+  const isNewToSwitzerland = searchCriteria?.newToSwitzerland === true;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans">
@@ -428,27 +391,8 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                 Ihre Daten werden gespeichert und die Dokumente werden vorbereitet...
               </p>
               <p className="text-sm text-blue-600">
-                Sie werden automatisch zu Skribble weitergeleitet.
+                Sie werden automatisch weitergeleitet.
               </p>
-            </div>
-          )}
-
-          {currentStep === 'redirect' && (
-            <div className="text-center py-12">
-              <PenTool className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-blue-600 mb-4">Weiterleitung zu Skribble</h3>
-              <p className="text-gray-600 mb-6">
-                Ihre Registrierung war erfolgreich! Sie werden automatisch zu Skribble weitergeleitet, 
-                wo Sie die Kündigung und den neuen Versicherungsantrag digital signieren können.
-              </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-                <h4 className="font-semibold text-blue-800 mb-2">Was passiert als nächstes:</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>1. Kündigungsformular für {formData.currentInsurer} signieren</li>
-                  <li>2. Antrag für {selectedInsurance?.Insurer || selectedInsurance?.Versicherer} signieren</li>
-                  <li>3. Beide Dokumente werden automatisch versendet</li>
-                </ul>
-              </div>
             </div>
           )}
 
@@ -457,12 +401,11 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <h3 className="text-2xl font-bold text-green-600 mb-4">Erfolgreich abgeschlossen!</h3>
               <p className="text-gray-600 mb-6">
-                Alle Dokumente wurden erfolgreich signiert und versendet. 
-                Wir werden uns in Kürze bei Ihnen melden.
+                Alle Dokumente wurden erfolgreich signiert und versendet.
               </p>
               <button
                 onClick={handleClose}
-                className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
               >
                 Schließen
               </button>
@@ -475,16 +418,17 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                 Persönliche Angaben für Versicherungswechsel
               </h3>
               <p className="text-center text-gray-600 mb-2">
-                {selectedInsurance?.Insurer || selectedInsurance?.Versicherer} - {selectedInsurance?.['Tariff name'] || selectedInsurance?.Modell}
+                Gewählte Versicherung: <span className="font-semibold text-gray-800">{selectedInsurance?.insurerName || selectedInsurance?.Insurer || selectedInsurance?.Versicherer}</span>
               </p>
               <div className="text-center mb-6">
                 <div className="inline-flex items-center bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-700">
                   <FileText className="w-4 h-4 mr-2" />
-                   Echte Skribble-Integration
+                  Echte Skribble-Integration
                 </div>
-                {searchCriteria?.plz && (
-                  <div className="mt-2 text-sm text-green-600">
-                    ✓ PLZ {searchCriteria.plz} aus Ihrer Suche
+                {isNewToSwitzerland && (
+                  <div className="mt-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 inline-flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Neu in der Schweiz - Versicherungsbeginn basiert auf Einreisedatum
                   </div>
                 )}
               </div>
@@ -498,7 +442,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
               
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                  {/* Salutation */}
                   <div>
                     <label htmlFor="salutation" className="block text-sm font-medium text-gray-700 mb-1">
                       Anrede
@@ -515,7 +458,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                   </div>
                   <div></div>
                   
-                  {/* First Name */}
                   <div>
                     <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
                       Vorname*
@@ -535,7 +477,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
-                  {/* Last Name */}
                   <div>
                     <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
                       Nachname*
@@ -555,7 +496,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
-                  {/* Birth Date */}
                   <div>
                     <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Geburtsdatum*
@@ -576,7 +516,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
-                  {/* Phone */}
                   <div>
                     <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                       Telefonnummer*
@@ -597,7 +536,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
-                  {/* Email */}
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                       E-Mail*
@@ -618,7 +556,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
                   
-                  {/* Address */}
                   <div>
                     <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
                       Adresse*
@@ -639,7 +576,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
 
-                  {/* Current Insurer */}
                   <div>
                     <label htmlFor="currentInsurer" className="block text-sm font-medium text-gray-700 mb-1">
                       Aktuelle Krankenversicherung*
@@ -665,54 +601,53 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     )}
                   </div>
 
-                  {/* Current Policy Number */}
                   <div>
                     <label htmlFor="currentPolicyNumber" className="block text-sm font-medium text-gray-700 mb-1">
                       Aktuelle Policenummer
                     </label>
                     <input 
                       type="text" 
-                      id="currentPolicyNumber" 
+                      id="currentPolicyNumber"  required
                       value={formData.currentPolicyNumber}
                       onChange={handleInputChange}
-                      placeholder="Optional - hilft bei der Kündigung"
+                      placeholder="hilft bei der Kündigung"
                       className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors" 
                     />
                   </div>
 
-                  <div>
-                    <label htmlFor="idDocument" className="block text-sm font-medium text-gray-700 mb-1">
-                      Ausweis Kopie
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        id="idDocument"
-                        onChange={handleFileUpload}
-                        accept="image/*,.pdf"
-                        className="w-full bg-gray-100 border-0 rounded-lg p-3 pr-10 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white file:hidden transition-colors"
+                  {/* ID Document Upload */}
+                  <DualIDUpload 
+                    formData={formData}
+                    setFormData={setFormData}
+                    validationErrors={validationErrors}
+                    setValidationErrors={setValidationErrors}
+                    setSubmitError={setSubmitError}
+                  />
+
+                  {/* AHV Number - ONLY show when NOT new to Switzerland */}
+                  {!isNewToSwitzerland && (
+                    <div>
+                      <label htmlFor="ahvNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                        AHV-Nummer *
+                      </label>
+                      <input 
+                        type="text" 
+                        id="ahvNumber" 
+                        value={formData.ahvNumber}
+                        onChange={handleInputChange}
+                        placeholder="756.XXXX.XXXX.XX"
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.ahvNumber ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required={!isNewToSwitzerland}
                       />
-                      <Camera className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5 pointer-events-none" />
+                      {validationErrors.ahvNumber && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.ahvNumber}</p>
+                      )}
                     </div>
-                    {uploadedFile && (
-                      <p className="text-sm text-green-600 mt-1">Datei ausgewählt: {uploadedFile.name}</p>
-                    )}
-                  </div>
+                  )}
 
-                  <div>
-                    <label htmlFor="ahvNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                      AHV-Nummer
-                    </label>
-                    <input 
-                      type="text" 
-                      id="ahvNumber" 
-                      value={formData.ahvNumber}
-                      onChange={handleInputChange}
-                      placeholder="756.XXXX.XXXX.XX"
-                      className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder:text-gray-400 transition-colors" 
-                    />
-                  </div>
-
+                  {/* Insurance Start Date - Non-editable for new residents, fixed for others */}
                   <div>
                     <label htmlFor="insuranceStartDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Gewünschter Versicherungsbeginn
@@ -722,11 +657,22 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                       id="insuranceStartDate" 
                       value={formData.insuranceStartDate}
                       onChange={handleInputChange}
-                      min="2025-01-01"
-                      className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors" 
+                      disabled={true}
+                      className="w-full bg-gray-200 border-0 rounded-lg p-3 text-gray-800 cursor-not-allowed focus:outline-none transition-colors"
                     />
+                    {isNewToSwitzerland && searchCriteria?.entryDate && (
+                      <p className="mt-1 text-xs text-blue-600">
+                        ✓ Automatisch gesetzt basierend auf Ihrem Einreisedatum
+                      </p>
+                    )}
+                    {!isNewToSwitzerland && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Standard Versicherungsbeginn: 01.01.2026
+                      </p>
+                    )}
                   </div>
 
+                  {/* Nationality */}
                   <div>
                     <label htmlFor="nationality" className="block text-sm font-medium text-gray-700 mb-1">
                       Staatsangehörigkeit
@@ -760,9 +706,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     <label htmlFor="informationArt45" className="ml-3 text-sm text-blue-600 font-semibold">
                       Information nach Art. 45*
                     </label>
-                    {validationErrors.informationArt45 && (
-                      <p className="ml-3 text-sm text-red-600">{validationErrors.informationArt45}</p>
-                    )}
                   </div>
                   
                   <div className="flex items-start">
@@ -779,9 +722,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     <label htmlFor="agbAccepted" className="ml-3 text-sm text-blue-600 font-semibold">
                       AGB*
                     </label>
-                    {validationErrors.agbAccepted && (
-                      <p className="ml-3 text-sm text-red-600">{validationErrors.agbAccepted}</p>
-                    )}
                   </div>
                   
                   <div className="flex items-start">
@@ -798,9 +738,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     <label htmlFor="mandateAccepted" className="ml-3 text-sm text-blue-600 font-semibold">
                       Auftrag und Vollmacht*
                     </label>
-                    {validationErrors.mandateAccepted && (
-                      <p className="ml-3 text-sm text-red-600">{validationErrors.mandateAccepted}</p>
-                    )}
                   </div>
                   
                   <div className="flex items-start">
@@ -817,9 +754,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
                     <label htmlFor="terminationAuthority" className="ml-3 text-sm text-blue-600 font-semibold">
                       Vollmacht zur Kündigung*
                     </label>
-                    {validationErrors.terminationAuthority && (
-                      <p className="ml-3 text-sm text-red-600">{validationErrors.terminationAuthority}</p>
-                    )}
                   </div>
                   
                   <div className="flex items-start">
@@ -870,6 +804,6 @@ const InsuranceSelectionPopup: React.FC<InsuranceSelectionPopupProps> = ({
       </div>
     </div>
   );
-  };
+};
 
 export default InsuranceSelectionPopup;

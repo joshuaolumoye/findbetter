@@ -52,6 +52,7 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
     fetchRegionData();
   }, [form.plz]);
 
+
   useEffect(() => {
     if (age !== null) {
       const franchiseValue = Number(form.franchise);
@@ -151,7 +152,13 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
 
     try {
       if (onSearchCriteria) {
-        onSearchCriteria(form, regionData);
+        const criteriaToPass = {
+          ...form,
+          geburtsdatum: `${form.geburtsjahr}-01-01`, // Add birth date in proper format
+          insuranceStartDate: form.newToSwitzerland && form.entryDate ? form.entryDate : '2026-01-01',
+          comparisonDate: form.newToSwitzerland && form.entryDate ? form.entryDate : new Date().toISOString().split("T")[0],
+        };
+        onSearchCriteria(criteriaToPass, regionData);
       }
 
       const getTariffCode = (model) => {
@@ -449,6 +456,7 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
             </p>
           )}
         </div>
+        
         <div className="mb-6">
           <label
             htmlFor="aktuelleKK"
@@ -552,16 +560,6 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
             )}
           </div>
         )}
-
-        <div className="mb-6">
-          <button
-            type="button"
-            onClick={() => onAddPerson && onAddPerson()}
-            className="text-black hover:text-gray-700 font-medium text-sm underline"
-          >
-            + Für weitere Person berechnen
-          </button>
-        </div>
 
         <button
           type="submit"

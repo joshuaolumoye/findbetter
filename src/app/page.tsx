@@ -63,6 +63,7 @@ export default function Home() {
   ]);
   const [additionalPeople, setAdditionalPeople] = useState([]);
   const [regionData, setRegionData] = useState(null);
+  const [searchCriteria, setSearchCriteria] = useState(null); // 👈 ADD THIS
   const [debugInfo, setDebugInfo] = useState(null);
 
   const extractItemsFromResults = (results) => {
@@ -113,7 +114,8 @@ export default function Home() {
   };
 
   const handleSearchCriteria = (criteria, region) => {
-    console.log("Search criteria:", criteria);
+    console.log("Search criteria received in Home:", criteria); // 👈 ADD THIS LOG
+    setSearchCriteria(criteria); // 👈 STORE IT IN STATE
     setRegionData(region);
   };
 
@@ -160,10 +162,10 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 pb-20">
+      <div className="container mx-auto px-6 pb-20" id="calculator-section">
         <div className="flex flex-col lg:flex-row justify-center items-start gap-8 relative">
           {/* Left side - Forms */}
-          <div className="space-y-6 lg:w-auto flex-shrink-0">
+          <div className="space-y-6 lg:w-auto flex-shrink-0" >
             <PremiumCalculator
               onResults={handleResults}
               onDebugInfo={setDebugInfo}
@@ -188,6 +190,7 @@ export default function Home() {
             <ComparisonResult
               allPersonsResults={allPersonsResults}
               debugInfo={debugInfo}
+              searchCriteria={searchCriteria}
             />
           </div>
         </div>

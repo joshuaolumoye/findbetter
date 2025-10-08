@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const webhookConfig = {
   secret: process.env.SKRIBBLE_WEBHOOK_SECRET || 'demo_webhook_secret_123',
   apiKey: process.env.SKRIBBLE_API_KEY || '',
-  baseUrl: process.env.SKRIBBLE_BASE_URL || 'https://api.skribble.de',
+  baseUrl: process.env.SKRIBBLE_BASE_URL || 'https://api.skribble.com',
   environment: process.env.SKRIBBLE_ENVIRONMENT || 'sandbox',
   username: process.env.SKRIBBLE_USERNAME || 'api_demo_companiox_15d1_1'
 };

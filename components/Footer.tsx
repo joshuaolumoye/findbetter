@@ -1,3 +1,4 @@
+import Link from "next/link";
 const Footer = () => {
   return (
     <footer className="bg-black text-white py-12 mt-16">
@@ -7,11 +8,10 @@ const Footer = () => {
           <h3 className="text-lg font-bold mb-4">Findbetter.ch</h3>
           <ul className="space-y-2">
             <li className="font-semibold">Unternehmen</li>
-            <li className="hover:underline cursor-pointer">Impressum</li>
-            <li className="hover:underline cursor-pointer">Über Findbetter.ch</li>
+            <li><Link href="/impressum" className="hover:underline">Impressum</Link></li>
+            <li><Link href="/ueber-findbetter" className="hover:underline">Über Findbetter.ch</Link></li>
             <li className="hover:underline cursor-pointer">Unser Service</li>
             <li className="hover:underline cursor-pointer">Medien</li>
-            <li className="hover:underline cursor-pointer">An/rat</li>
           </ul>
         </div>
 
@@ -19,7 +19,7 @@ const Footer = () => {
         <div>
           <h3 className="text-lg font-bold mb-4">Richtlinien</h3>
           <ul className="space-y-2">
-            <li className="hover:underline cursor-pointer">Datenschutzbestimmungen</li>
+            <li><Link href="/datenschutz" className="hover:underline">Datenschutzbestimmungen</Link></li>
             <li className="hover:underline cursor-pointer">Informationen nach Artikel 45</li>
             <li className="hover:underline cursor-pointer">Allgemeine Geschäftsbedingungen</li>
             <li className="hover:underline cursor-pointer">Auftrag und Vollmacht</li>

@@ -1,17 +1,27 @@
-// lib/file-upload.ts
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, readFile } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { PDFDocument } from 'pdf-lib';
 
-export interface FileUploadResult {
+export interface DualFileUploadResult {
   success: boolean;
-  path?: string;
+  frontPath?: string;
+  backPath?: string;
+  combinedPath?: string;
   error?: string;
-  filename?: string;
-  size?: number;
+  filenames?: {
+    front?: string;
+    back?: string;
+    combined?: string;
+  };
+  sizes?: {
+    front?: number;
+    back?: number;
+    combined?: number;
+  };
 }
 
-export class FileUploadManager {
+export class DualDocumentUploadManager {
   private uploadsDir: string;
   private maxFileSize: number = 10 * 1024 * 1024; // 10MB
   private allowedTypes: string[] = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -21,57 +31,81 @@ export class FileUploadManager {
   }
 
   /**
-   * Save a base64 encoded file to the uploads directory
+   * Save both front and back sides of ID document
    */
-  async saveBase64File(
-    base64Data: string,
+  async saveDualDocuments(
+    frontBase64: string,
+    backBase64: string,
     userId: string,
-    category: 'id-documents' | 'generated-documents' | 'user-files' = 'user-files',
-    originalFilename?: string
-  ): Promise<FileUploadResult> {
+    createCombinedPDF: boolean = true
+  ): Promise<DualFileUploadResult> {
     try {
-      console.log(`Starting file upload for user ${userId}, category: ${category}`);
+      console.log(`📄 Starting dual document upload for user ${userId}`);
 
-      // Validate and parse base64 data
-      const { mimeType, buffer, fileExtension } = this.parseBase64(base64Data);
-      
-      // Validate file
-      const validation = this.validateFile(buffer, mimeType);
-      if (!validation.valid) {
-        return { success: false, error: validation.error };
-      }
-
-      // Create directory structure
-      const userDir = path.join(this.uploadsDir, category, userId);
+      // Create user directory
+      const userDir = path.join(this.uploadsDir, 'id-documents', userId);
       await mkdir(userDir, { recursive: true });
 
-      // Generate unique filename
       const timestamp = Date.now();
       const uniqueId = uuidv4().substring(0, 8);
-      const sanitizedOriginal = originalFilename ? 
-        this.sanitizeFilename(originalFilename) : 
-        `document_${timestamp}`;
       
-      const filename = `${sanitizedOriginal}_${uniqueId}${fileExtension}`;
-      const filePath = path.join(userDir, filename);
+      // Process front side
+      const frontResult = await this.processSingleDocument(
+        frontBase64,
+        userDir,
+        `id_front_${timestamp}_${uniqueId}`
+      );
 
-      // Save file
-      await writeFile(filePath, buffer);
+      if (!frontResult.success) {
+        return { success: false, error: `Front upload failed: ${frontResult.error}` };
+      }
 
-      // Return relative path for database storage
-      const relativePath = `/uploads/${category}/${userId}/${filename}`;
+      // Process back side
+      const backResult = await this.processSingleDocument(
+        backBase64,
+        userDir,
+        `id_back_${timestamp}_${uniqueId}`
+      );
 
-      console.log(`File uploaded successfully: ${filename} (${buffer.length} bytes)`);
+      if (!backResult.success) {
+        return { success: false, error: `Back upload failed: ${backResult.error}` };
+      }
 
-      return {
+      const result: DualFileUploadResult = {
         success: true,
-        path: relativePath,
-        filename: filename,
-        size: buffer.length
+        frontPath: `/uploads/id-documents/${userId}/${frontResult.filename}`,
+        backPath: `/uploads/id-documents/${userId}/${backResult.filename}`,
+        filenames: {
+          front: frontResult.filename,
+          back: backResult.filename
+        },
+        sizes: {
+          front: frontResult.size,
+          back: backResult.size
+        }
       };
 
+      // Create combined PDF if requested
+      if (createCombinedPDF) {
+        const combinedResult = await this.createCombinedPDF(
+          path.join(userDir, frontResult.filename!),
+          path.join(userDir, backResult.filename!),
+          userDir,
+          `id_combined_${timestamp}_${uniqueId}.pdf`
+        );
+
+        if (combinedResult.success) {
+          result.combinedPath = `/uploads/id-documents/${userId}/${combinedResult.filename}`;
+          result.filenames!.combined = combinedResult.filename;
+          result.sizes!.combined = combinedResult.size;
+        }
+      }
+
+      console.log(`✅ Dual documents uploaded successfully for user ${userId}`);
+      return result;
+
     } catch (error) {
-      console.error('File upload error:', error);
+      console.error('❌ Dual document upload error:', error);
       return {
         success: false,
         error: `Upload failed: ${error.message}`
@@ -80,47 +114,120 @@ export class FileUploadManager {
   }
 
   /**
-   * Save a Buffer to the uploads directory
+   * Process single document (front or back)
    */
-  async saveBuffer(
-    buffer: Buffer,
-    userId: string,
-    filename: string,
-    category: 'id-documents' | 'generated-documents' | 'user-files' = 'generated-documents'
-  ): Promise<FileUploadResult> {
+  private async processSingleDocument(
+    base64Data: string,
+    targetDir: string,
+    baseFilename: string
+  ): Promise<{ success: boolean; filename?: string; size?: number; error?: string }> {
     try {
-      // Create directory structure
-      const userDir = path.join(this.uploadsDir, category, userId);
-      await mkdir(userDir, { recursive: true });
-
-      // Generate unique filename with timestamp
-      const timestamp = Date.now();
-      const fileExtension = path.extname(filename) || '.pdf';
-      const baseName = path.basename(filename, fileExtension);
-      const uniqueFilename = `${baseName}_${timestamp}${fileExtension}`;
+      const { mimeType, buffer, fileExtension } = this.parseBase64(base64Data);
       
-      const filePath = path.join(userDir, uniqueFilename);
+      const validation = this.validateFile(buffer, mimeType);
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
 
-      // Save file
-      await writeFile(filePath, buffer);
+      const filename = `${baseFilename}${fileExtension}`;
+      const filepath = path.join(targetDir, filename);
 
-      // Return relative path
-      const relativePath = `/uploads/${category}/${userId}/${uniqueFilename}`;
-
-      console.log(`Buffer saved successfully: ${uniqueFilename} (${buffer.length} bytes)`);
+      await writeFile(filepath, buffer);
 
       return {
         success: true,
-        path: relativePath,
-        filename: uniqueFilename,
+        filename,
         size: buffer.length
       };
 
     } catch (error) {
-      console.error('Buffer save error:', error);
       return {
         success: false,
-        error: `Save failed: ${error.message}`
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Create combined PDF from front and back images/PDFs
+   */
+  private async createCombinedPDF(
+    frontPath: string,
+    backPath: string,
+    targetDir: string,
+    filename: string
+  ): Promise<{ success: boolean; filename?: string; size?: number; error?: string }> {
+    try {
+      console.log('📄 Creating combined PDF from front and back documents...');
+
+      const pdfDoc = await PDFDocument.create();
+      
+      // Read front document
+      const frontBuffer = await readFile(frontPath);
+      const frontExt = path.extname(frontPath).toLowerCase();
+
+      // Read back document
+      const backBuffer = await readFile(backPath);
+      const backExt = path.extname(backPath).toLowerCase();
+
+      // Add front page
+      if (frontExt === '.pdf') {
+        const frontPdf = await PDFDocument.load(frontBuffer);
+        const [frontPage] = await pdfDoc.copyPages(frontPdf, [0]);
+        pdfDoc.addPage(frontPage);
+      } else {
+        // It's an image
+        const frontImage = frontExt === '.png' 
+          ? await pdfDoc.embedPng(frontBuffer)
+          : await pdfDoc.embedJpg(frontBuffer);
+        
+        const page = pdfDoc.addPage([frontImage.width, frontImage.height]);
+        page.drawImage(frontImage, {
+          x: 0,
+          y: 0,
+          width: frontImage.width,
+          height: frontImage.height
+        });
+      }
+
+      // Add back page
+      if (backExt === '.pdf') {
+        const backPdf = await PDFDocument.load(backBuffer);
+        const [backPage] = await pdfDoc.copyPages(backPdf, [0]);
+        pdfDoc.addPage(backPage);
+      } else {
+        // It's an image
+        const backImage = backExt === '.png'
+          ? await pdfDoc.embedPng(backBuffer)
+          : await pdfDoc.embedJpg(backBuffer);
+        
+        const page = pdfDoc.addPage([backImage.width, backImage.height]);
+        page.drawImage(backImage, {
+          x: 0,
+          y: 0,
+          width: backImage.width,
+          height: backImage.height
+        });
+      }
+
+      // Save combined PDF
+      const pdfBytes = await pdfDoc.save();
+      const combinedPath = path.join(targetDir, filename);
+      await writeFile(combinedPath, pdfBytes);
+
+      console.log(`✅ Combined PDF created: ${filename} (${pdfBytes.length} bytes)`);
+
+      return {
+        success: true,
+        filename,
+        size: pdfBytes.length
+      };
+
+    } catch (error) {
+      console.error('❌ Error creating combined PDF:', error);
+      return {
+        success: false,
+        error: error.message
       };
     }
   }
@@ -137,14 +244,12 @@ export class FileUploadManager {
     let base64String = base64Data;
     let fileExtension = '.bin';
 
-    // Check if it's a data URL
     if (base64Data.startsWith('data:')) {
       const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/);
       if (matches) {
         mimeType = matches[1];
         base64String = matches[2];
         
-        // Determine file extension from MIME type
         switch (mimeType) {
           case 'application/pdf':
             fileExtension = '.pdf';
@@ -156,14 +261,11 @@ export class FileUploadManager {
           case 'image/png':
             fileExtension = '.png';
             break;
-          default:
-            fileExtension = '.bin';
         }
       }
     }
 
     const buffer = Buffer.from(base64String, 'base64');
-
     return { mimeType, buffer, fileExtension };
   }
 
@@ -174,7 +276,6 @@ export class FileUploadManager {
     valid: boolean;
     error?: string;
   } {
-    // Check file size
     if (buffer.length > this.maxFileSize) {
       return {
         valid: false,
@@ -182,15 +283,10 @@ export class FileUploadManager {
       };
     }
 
-    // Check empty file
     if (buffer.length === 0) {
-      return {
-        valid: false,
-        error: 'File is empty'
-      };
+      return { valid: false, error: 'File is empty' };
     }
 
-    // Check MIME type
     if (!this.allowedTypes.includes(mimeType)) {
       return {
         valid: false,
@@ -202,18 +298,6 @@ export class FileUploadManager {
   }
 
   /**
-   * Sanitize filename to prevent path traversal
-   */
-  private sanitizeFilename(filename: string): string {
-    // Remove path separators and dangerous characters
-    return filename
-      .replace(/[\/\\:*?"<>|]/g, '_')
-      .replace(/\.+/g, '.')
-      .replace(/^\./, '')
-      .substring(0, 100); // Limit length
-  }
-
-  /**
    * Initialize upload directories
    */
   async initializeDirectories(): Promise<void> {
@@ -222,80 +306,9 @@ export class FileUploadManager {
     for (const category of categories) {
       const categoryDir = path.join(this.uploadsDir, category);
       await mkdir(categoryDir, { recursive: true });
-      console.log(`Initialized upload directory: ${categoryDir}`);
-    }
-  }
-
-  /**
-   * Get file info without reading the full file
-   */
-  async getFileInfo(relativePath: string): Promise<{
-    exists: boolean;
-    size?: number;
-    mtime?: Date;
-  }> {
-    try {
-      const { stat } = await import('fs/promises');
-      const fullPath = path.join(process.cwd(), 'public', relativePath);
-      const stats = await stat(fullPath);
-      
-      return {
-        exists: true,
-        size: stats.size,
-        mtime: stats.mtime
-      };
-    } catch {
-      return { exists: false };
-    }
-  }
-
-  /**
-   * Clean up old files (call periodically)
-   */
-  async cleanupOldFiles(maxAgeHours: number = 72): Promise<number> {
-    try {
-      const { readdir, stat, unlink } = await import('fs/promises');
-      let deletedCount = 0;
-      const maxAge = maxAgeHours * 60 * 60 * 1000; // Convert to milliseconds
-      const now = Date.now();
-
-      const categories = ['id-documents', 'generated-documents', 'user-files'];
-      
-      for (const category of categories) {
-        const categoryDir = path.join(this.uploadsDir, category);
-        
-        try {
-          const userDirs = await readdir(categoryDir);
-          
-          for (const userDir of userDirs) {
-            const userDirPath = path.join(categoryDir, userDir);
-            const files = await readdir(userDirPath);
-            
-            for (const file of files) {
-              const filePath = path.join(userDirPath, file);
-              const stats = await stat(filePath);
-              
-              if (now - stats.mtime.getTime() > maxAge) {
-                await unlink(filePath);
-                deletedCount++;
-                console.log(`Deleted old file: ${filePath}`);
-              }
-            }
-          }
-        } catch (error) {
-          console.warn(`Error cleaning category ${category}:`, error.message);
-        }
-      }
-
-      console.log(`Cleanup completed: ${deletedCount} files deleted`);
-      return deletedCount;
-      
-    } catch (error) {
-      console.error('Cleanup error:', error);
-      return 0;
+      console.log(`📁 Initialized: ${categoryDir}`);
     }
   }
 }
 
-// Export singleton instance
-export const fileUploadManager = new FileUploadManager();
+export const dualDocumentUploadManager = new DualDocumentUploadManager();
