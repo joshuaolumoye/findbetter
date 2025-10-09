@@ -154,9 +154,10 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
       if (onSearchCriteria) {
         const criteriaToPass = {
           ...form,
-          geburtsdatum: `${form.geburtsjahr}-01-01`, // Add birth date in proper format
+          geburtsdatum: `${form.geburtsjahr}-01-01`,
           insuranceStartDate: form.newToSwitzerland && form.entryDate ? form.entryDate : '2026-01-01',
           comparisonDate: form.newToSwitzerland && form.entryDate ? form.entryDate : new Date().toISOString().split("T")[0],
+          fullAddress: regionData ? `${regionData.name}` : form.plz,
         };
         onSearchCriteria(criteriaToPass, regionData);
       }

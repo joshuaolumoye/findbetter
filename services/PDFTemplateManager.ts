@@ -1,5 +1,5 @@
-// services/PDFTemplateManager.ts - FIXED with proper user data filling
-import { PDFDocument, rgb, StandardFonts, PDFForm, PDFTextField } from 'pdf-lib';
+// services/PDFTemplateManager.ts - WITH LOGO AND EXACT TEMPLATE MATCHING
+import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -34,25 +34,49 @@ export interface SelectedInsurance {
 export class PDFTemplateManager {
   private templateBasePath: string;
   private maxProcessingTime: number = 25000;
+  private logoPath: string;
 
   constructor() {
     this.templateBasePath = path.join(process.cwd(), 'public', 'documents');
+    this.logoPath = path.join(process.cwd(), 'public', 'images', 'howden-logo.png');
     console.log('PDF Template Manager initialized with base path:', this.templateBasePath);
   }
 
   /**
-   * FIXED: Generate cancellation PDF with proper user data
+   * Load and embed logo into PDF
+   */
+  private async embedLogo(pdfDoc: PDFDocument): Promise<PDFImage | null> {
+    try {
+      const logoExists = await fs.access(this.logoPath).then(() => true).catch(() => false);
+      
+      if (!logoExists) {
+        console.warn('Logo file not found at:', this.logoPath);
+        return null;
+      }
+
+      const logoBytes = await fs.readFile(this.logoPath);
+      const logoImage = await pdfDoc.embedPng(logoBytes);
+      console.log('✅ Logo embedded successfully');
+      return logoImage;
+    } catch (error) {
+      console.error('Error embedding logo:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate cancellation PDF matching exact template
    */
   async generateCancellationPDF(userData: UserFormData, currentInsurer: string): Promise<Buffer> {
     const startTime = Date.now();
     console.log('Starting cancellation PDF generation with user data:', {
       name: `${userData.firstName} ${userData.lastName}`,
       email: userData.email,
-      currentInsurer
+      currentInsurer,
+      insuranceStartDate: userData.insuranceStartDate
     });
 
     try {
-      // ALWAYS create from scratch with user data (more reliable than template filling)
       const pdfDoc = await this.createCancellationWithUserData(userData, currentInsurer);
       
       const pdfBytes = await pdfDoc.save({
@@ -70,7 +94,7 @@ export class PDFTemplateManager {
   }
 
   /**
-   * FIXED: Generate application PDF with proper user data
+   * Generate application PDF with logo and exact template matching
    */
   async generateInsuranceApplicationPDF(
     userData: UserFormData,
@@ -84,7 +108,6 @@ export class PDFTemplateManager {
     });
 
     try {
-      // ALWAYS create from scratch with user data
       const pdfDoc = await this.createApplicationWithUserData(userData, selectedInsurance);
       
       const pdfBytes = await pdfDoc.save({
@@ -102,132 +125,223 @@ export class PDFTemplateManager {
   }
 
   /**
-   * FIXED: Create cancellation PDF populated with actual user data
+   * Create cancellation PDF - exact match to template
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
     currentInsurer: string
   ): Promise<PDFDocument> {
-    console.log('Creating cancellation PDF with user data...');
+    console.log('Creating cancellation PDF matching exact template...');
     
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]); // A4
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    let y = 750;
-    const lineHeight = 18;
+    let y = 790;
+    const lineHeight = 14;
     const leftMargin = 50;
+    const rightColumnX = 320;
 
-    // Header
-    page.drawText('KÜNDIGUNG KRANKENVERSICHERUNG', {
+    // Header instructions (light gray, smaller font)
+    page.drawText('Tragen Sie Ihren Absender ein:', {
       x: leftMargin,
       y: y,
-      size: 16,
-      font: boldFont,
-      color: rgb(0, 0, 0)
-    });
-
-    y -= lineHeight * 1.5;
-    page.drawText('(Obligatorische Krankenpflegeversicherung - KVG)', {
-      x: leftMargin,
-      y: y,
-      size: 12,
-      font: boldFont,
-      color: rgb(0, 0, 0)
-    });
-
-    y -= lineHeight * 2;
-
-    // Date and location - USING REAL USER DATA
-    const today = new Date();
-    const dateStr = today.toLocaleDateString('de-CH');
-    const userCity = userData.city || 'Zürich';
-    
-    page.drawText(`${userCity}, ${dateStr}`, {
-      x: 400,
-      y: y,
-      size: 12,
+      size: 8,
       font,
-      color: rgb(0, 0, 0)
+      color: rgb(0.5, 0.5, 0.5)
     });
 
-    y -= lineHeight * 2.5;
-
-    // Sender information - USING REAL USER DATA
-    page.drawText('Absender:', {
-      x: leftMargin,
+    page.drawText('Tragen Sie die Adresse Ihrer', {
+      x: rightColumnX,
       y: y,
-      size: 12,
-      font: boldFont,
-      color: rgb(0, 0, 0)
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5)
     });
 
-    y -= lineHeight;
-    const senderLines = [
-      `${userData.firstName} ${userData.lastName}`, // REAL NAME
-      userData.address, // REAL ADDRESS
-      `${userData.postalCode} ${userData.city}`, // REAL POSTAL CODE & CITY
-      `Tel: ${userData.phone}`, // REAL PHONE
-      `E-Mail: ${userData.email}` // REAL EMAIL
-    ];
+    y -= 10;
+    page.drawText('Krankenversicherung ein:', {
+      x: rightColumnX,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5)
+    });
 
-    senderLines.forEach(line => {
-      page.drawText(line, {
+    y -= 20;
+
+    // Left column - Policy number if available
+    let leftY = y;
+    if (userData.currentInsurancePolicyNumber) {
+      page.drawText('Versicherten Nummer', {
         x: leftMargin,
-        y: y,
-        size: 12,
+        y: leftY,
+        size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      y -= lineHeight;
-    });
+      leftY -= lineHeight;
+      page.drawText(userData.currentInsurancePolicyNumber, {
+        x: leftMargin,
+        y: leftY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      leftY -= lineHeight;
+    }
 
-    y -= lineHeight;
-
-    // Recipient - USING REAL CURRENT INSURER
-    page.drawText('An:', {
+    // Sender name
+    page.drawText('Name', {
       x: leftMargin,
-      y: y,
-      size: 12,
-      font: boldFont,
+      y: leftY,
+      size: 10,
+      font,
       color: rgb(0, 0, 0)
     });
-
-    y -= lineHeight;
-    page.drawText(currentInsurer, { // REAL CURRENT INSURER
+    leftY -= lineHeight;
+    page.drawText(userData.lastName, {
       x: leftMargin,
-      y: y,
-      size: 12,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+
+    page.drawText('Vorname', {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+    page.drawText(userData.firstName, {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+
+    page.drawText('Strasse, Nummer', {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+    page.drawText(userData.address, {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+
+    page.drawText('Postleitzahl, Wohnort', {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= lineHeight;
+    page.drawText(`${userData.postalCode}, ${userData.city}`, {
+      x: leftMargin,
+      y: leftY,
+      size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
-    // Add insurer address (common Swiss insurers)
+    // Right column - Insurance company
+    let rightY = y;
+    page.drawText('Name der Krankenversicherung', {
+      x: rightColumnX,
+      y: rightY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    rightY -= lineHeight;
+    page.drawText(currentInsurer, {
+      x: rightColumnX,
+      y: rightY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    rightY -= lineHeight;
+
     const insurerAddress = this.getInsurerAddress(currentInsurer);
     if (insurerAddress) {
-      y -= lineHeight;
-      page.drawText(insurerAddress.street, {
-        x: leftMargin,
-        y: y,
-        size: 12,
+      page.drawText('Strasse, Nummer', {
+        x: rightColumnX,
+        y: rightY,
+        size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      y -= lineHeight;
-      page.drawText(`${insurerAddress.postal} ${insurerAddress.city}`, {
-        x: leftMargin,
-        y: y,
-        size: 12,
+      rightY -= lineHeight;
+      page.drawText(insurerAddress.street, {
+        x: rightColumnX,
+        y: rightY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      rightY -= lineHeight;
+
+      page.drawText('Postleitzahl, Ort', {
+        x: rightColumnX,
+        y: rightY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      rightY -= lineHeight;
+      page.drawText(`${insurerAddress.postal}, ${insurerAddress.city}`, {
+        x: rightColumnX,
+        y: rightY,
+        size: 10,
         font,
         color: rgb(0, 0, 0)
       });
     }
 
-    y -= lineHeight * 2;
+    // Move to next section
+    y = Math.min(leftY, rightY) - 30;
 
-    // Subject line
-    page.drawText('Betreff: Kündigung der obligatorischen Krankenpflegeversicherung', {
+    // Date and location
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('de-CH');
+    
+    page.drawText('Ort, Datum', {
+      x: leftMargin,
+      y: y,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= lineHeight;
+    page.drawText(`${userData.city}, ${dateStr}`, {
+      x: leftMargin,
+      y: y,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 30;
+
+    // Title - Bold and larger
+    page.drawText('Kundigung der obligatorischen Krankenpflegeversicherung', {
       x: leftMargin,
       y: y,
       size: 12,
@@ -235,338 +349,618 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
 
-    y -= lineHeight * 2;
+    y -= 16;
+    page.drawText('(Grundversicherung)', {
+      x: leftMargin,
+      y: y,
+      size: 12,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-    // Main content with REAL USER DATA
+    y -= 25;
+
+    // Greeting
     page.drawText('Sehr geehrte Damen und Herren', {
       x: leftMargin,
       y: y,
-      size: 12,
+      size: 11,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= lineHeight * 1.5;
-    const contentLines = [
-      'hiermit kündige ich meine obligatorische Krankenpflegeversicherung',
-      'per 31. Dezember 2024.',
-      '',
-      'Ich werde ab 1. Januar 2025 bei einem anderen Krankenversicherer',
-      'nach KVG versichert sein.',
-      '',
-      // Include policy number if available
-      userData.currentInsurancePolicyNumber ? 
-        `Versicherten-Nummer: ${userData.currentInsurancePolicyNumber}` : 
-        'Versicherten-Nummer: [Bitte bei Bedarf ergänzen]',
-      '',
-      'Besten Dank für die Ausführung des Auftrages.',
-      'Bitte bestätigen Sie mir die Kündigung schriftlich.',
-      '',
-      'Freundliche Grüsse'
-    ];
+    y -= 20;
 
-    contentLines.forEach(line => {
-      page.drawText(line, {
-        x: leftMargin,
-        y: y,
-        size: 12,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      y -= lineHeight;
-    });
+    // Calculate dates from insuranceStartDate
+    const insuranceStartDate = userData.insuranceStartDate || '2026-01-01';
+    const startDate = new Date(insuranceStartDate);
+    
+    const cancellationDate = new Date(startDate);
+    cancellationDate.setDate(cancellationDate.getDate() - 1);
+    
+    const cancellationDay = cancellationDate.getDate();
+    const cancellationMonth = this.getGermanMonth(cancellationDate.getMonth());
+    const cancellationYear = cancellationDate.getFullYear();
+    
+    const startDay = startDate.getDate();
+    const startMonth = startDate.getMonth() + 1;
+    const startYear = startDate.getFullYear();
 
-    // Signature area with REAL USER NAME
-    y -= lineHeight * 2;
-    page.drawText('____________________________________', {
+    // Main content - exact spacing from template
+    const line1 = `Hiermit kundige ich meine Grundversicherung per ${cancellationDay}. ${cancellationMonth} ${cancellationYear}. Ich werde ab ${startDay}.${startMonth}.${startYear} bei einem anderen`;
+    const line2 = 'Krankenversicherer nach KVG versichert sein.';
+
+    page.drawText(line1, {
       x: leftMargin,
       y: y,
-      size: 12,
+      size: 11,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= 14;
+    page.drawText(line2, {
+      x: leftMargin,
+      y: y,
+      size: 11,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= lineHeight * 0.8;
-    page.drawText(`${userData.firstName} ${userData.lastName}`, { // REAL NAME
+    y -= 20;
+
+    // Closing
+    page.drawText('Besten Dank fur die Ausfuhrung des Auftrages. Bitte stellen Sie mir eine entsprechende schriftliche Bestatigung zu.', {
+      x: leftMargin,
+      y: y,
+      size: 11,
+      font,
+      color: rgb(0, 0, 0),
+      maxWidth: 495
+    });
+
+    y -= 25;
+
+    page.drawText('Freundliche Grusse', {
+      x: leftMargin,
+      y: y,
+      size: 11,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 35;
+
+    // Signature section - two columns
+    page.drawText('Name, Vorname', {
       x: leftMargin,
       y: y,
       size: 10,
       font,
-      color: rgb(0.5, 0.5, 0.5)
+      color: rgb(0, 0, 0)
     });
 
-    console.log('✅ Cancellation PDF created with real user data');
-    return pdfDoc;
-  }
-
-  /**
-   * FIXED: Create application PDF populated with actual user data
-   */
-  private async createApplicationWithUserData(
-    userData: UserFormData,
-    selectedInsurance: SelectedInsurance
-  ): Promise<PDFDocument> {
-    console.log('Creating application PDF with user data...');
-    
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    let y = 750;
-    const lineHeight = 18;
-    const leftMargin = 50;
-
-    // Header with REAL INSURANCE DATA
-    page.drawText('KRANKENVERSICHERUNGSANTRAG', {
-      x: leftMargin,
+    page.drawText('Unterschrift', {
+      x: rightColumnX,
       y: y,
-      size: 18,
-      font: boldFont
-    });
-
-    y -= lineHeight * 1.5;
-    page.drawText(`${selectedInsurance.insurer} - ${selectedInsurance.tariffName}`, {
-      x: leftMargin,
-      y: y,
-      size: 14,
-      font: boldFont,
-      color: rgb(0, 0, 0.8)
-    });
-
-    y -= lineHeight * 2;
-
-    // Personal data section with REAL USER DATA
-    page.drawText('PERSÖNLICHE ANGABEN', {
-      x: leftMargin,
-      y: y,
-      size: 14,
-      font: boldFont
-    });
-
-    y -= lineHeight * 1.2;
-
-    const personalData = [
-      ['Anrede:', userData.salutation],
-      ['Name:', `${userData.firstName} ${userData.lastName}`], // REAL NAME
-      ['Geburtsdatum:', this.formatDate(userData.birthDate)], // REAL BIRTH DATE
-      ['Adresse:', userData.address], // REAL ADDRESS
-      ['PLZ/Ort:', `${userData.postalCode} ${userData.city}`], // REAL POSTAL & CITY
-      ['Telefon:', userData.phone], // REAL PHONE
-      ['E-Mail:', userData.email], // REAL EMAIL
-      ['AHV-Nr:', userData.ahvNumber || 'Wird nachgereicht'],
-      ['Nationalität:', userData.nationality || 'Schweiz']
-    ];
-
-    personalData.forEach(([label, value]) => {
-      page.drawText(label, {
-        x: leftMargin,
-        y: y,
-        size: 12,
-        font: boldFont
-      });
-      page.drawText(value || '[Nicht angegeben]', {
-        x: leftMargin + 120,
-        y: y,
-        size: 12,
-        font
-      });
-      y -= lineHeight;
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
     });
 
     y -= lineHeight;
-
-    // Insurance details section with REAL SELECTED INSURANCE DATA
-    page.drawText('VERSICHERUNGSDETAILS', {
-      x: leftMargin,
-      y: y,
-      size: 14,
-      font: boldFont
-    });
-
-    y -= lineHeight * 1.2;
-
-    const insuranceData = [
-      ['Versicherer:', selectedInsurance.insurer], // REAL SELECTED INSURER
-      ['Tarif:', selectedInsurance.tariffName], // REAL TARIFF
-      ['Monatsprämie:', `CHF ${selectedInsurance.premium.toFixed(2)}`], // REAL PREMIUM
-      ['Franchise:', `CHF ${selectedInsurance.franchise}`], // REAL FRANCHISE
-      ['Unfalldeckung:', selectedInsurance.accidentInclusion], // REAL ACCIDENT COVERAGE
-      ['Altersgruppe:', selectedInsurance.ageGroup],
-      ['Region:', selectedInsurance.region],
-      ['Beginn:', userData.insuranceStartDate || '01.01.2025']
-    ];
-
-    insuranceData.forEach(([label, value]) => {
-      page.drawText(label, {
-        x: leftMargin,
-        y: y,
-        size: 12,
-        font: boldFont
-      });
-      page.drawText(String(value), {
-        x: leftMargin + 120,
-        y: y,
-        size: 12,
-        font
-      });
-      y -= lineHeight;
-    });
-
-    y -= lineHeight * 2;
-
-    // Legal confirmation
-    const legalText = [
-      'Mit meiner Unterschrift bestätige ich:',
-      '• Die Richtigkeit aller oben gemachten Angaben',
-      '• Die Kenntnisnahme der Allgemeinen Versicherungsbedingungen',
-      '• Das Einverständnis zur Verarbeitung meiner Personendaten',
-      '• Den Wunsch zum Abschluss dieser Krankenversicherung',
-      '• Die Einhaltung der gesetzlichen Bestimmungen des KVG'
-    ];
-
-    legalText.forEach((line, index) => {
-      const textFont = index === 0 ? boldFont : font;
-      const textSize = index === 0 ? 12 : 10;
-      
-      page.drawText(line, {
-        x: leftMargin,
-        y: y,
-        size: textSize,
-        font: textFont,
-        color: index === 0 ? rgb(0, 0, 0) : rgb(0.3, 0.3, 0.3)
-      });
-      y -= lineHeight * 0.9;
-    });
-
-    y -= lineHeight * 2;
-
-    // Signature area with REAL USER NAME
-    const currentDate = new Date().toLocaleDateString('de-CH');
-    
-    page.drawText('____________________________________', {
-      x: leftMargin,
-      y: y,
-      size: 12,
-      font
-    });
-
-    page.drawText(`Datum: ${currentDate}`, {
-      x: 350,
-      y: y,
-      size: 10,
-      font,
-      color: rgb(0.5, 0.5, 0.5)
-    });
-
-    y -= lineHeight * 0.7;
-    page.drawText('Unterschrift', {
+    page.drawText(`${userData.lastName}, ${userData.firstName}`, {
       x: leftMargin,
       y: y,
       size: 10,
       font,
-      color: rgb(0.5, 0.5, 0.5)
+      color: rgb(0, 0, 0)
     });
 
-    y -= lineHeight * 0.5;
-    page.drawText(`${userData.firstName} ${userData.lastName}`, { // REAL NAME
+    y -= 40;
+
+    // Remark
+    page.drawText('Bemerkung:', {
       x: leftMargin,
       y: y,
-      size: 10,
-      font,
-      color: rgb(0.5, 0.5, 0.5)
+      size: 9,
+      font: boldFont,
+      color: rgb(0, 0, 0)
     });
 
-    console.log('✅ Application PDF created with real user data');
+    y -= 12;
+    page.drawText('Es wird empfohlen, diesen Brief per Einschreiben zu versenden', {
+      x: leftMargin,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0.4, 0.4, 0.4)
+    });
+
+    console.log('✅ Cancellation PDF created matching exact template');
     return pdfDoc;
   }
 
   /**
-   * Helper: Format date for Swiss format
+   * Create application PDF with logo - exact match to template
    */
-  private formatDate(dateString: string): string {
-    if (!dateString) return '';
+  // Update the createApplicationWithUserData method in PDFTemplateManager.ts
+
+/**
+ * Create application PDF with logo - exact match to template
+ */
+private async createApplicationWithUserData(
+  userData: UserFormData,
+  selectedInsurance: SelectedInsurance
+): Promise<PDFDocument> {
+  console.log('Creating application PDF with logo and exact template match...');
+  
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595, 842]);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  let y = 800;
+  const lineHeight = 14;
+  const leftMargin = 50;
+
+  // Try to embed logo on the RIGHT side and make it BIGGER
+  const logo = await this.embedLogo(pdfDoc);
+  if (logo) {
+    // Increased scale from 0.15 to 0.35 for bigger logo
+    const logoDims = logo.scale(0.35);
     
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('de-CH');
-    } catch {
-      return dateString; // Return as-is if parsing fails
-    }
+    // Position on RIGHT side: page width (595) - logo width - right margin (50)
+    const logoX = 595 - logoDims.width - 50;
+    
+    page.drawImage(logo, {
+      x: logoX,
+      y: y - logoDims.height,
+      width: logoDims.width,
+      height: logoDims.height,
+    });
+    
+    // Don't move y down since logo is on the right
+    console.log('✅ Logo positioned on right side:', {
+      x: logoX,
+      y: y - logoDims.height,
+      width: logoDims.width,
+      height: logoDims.height
+    });
+  }
+
+  // Header - Company address (matching template exactly)
+  page.drawText('Howden Broker Service Schweiz AG, Picardiestrasse 3A, CH-5040 Schoftland', {
+    x: leftMargin,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0.4, 0.4, 0.4)
+  });
+
+  y -= 12;
+
+  // FINMA and page number
+  page.drawText('FINMA Nr.: F01064059 | howdengroup.com - Version 07.2025', {
+    x: leftMargin,
+    y: y,
+    size: 7,
+    font,
+    color: rgb(0.4, 0.4, 0.4)
+  });
+
+  page.drawText('Seite 1 von 6', {
+    x: 500,
+    y: y,
+    size: 7,
+    font,
+    color: rgb(0.4, 0.4, 0.4)
+  });
+
+  y -= 25;
+
+  // Title - Bold
+  page.drawText('Brokermandat', {
+    x: leftMargin,
+    y: y,
+    size: 16,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 20;
+  page.drawText('Auftrag und Vollmacht', {
+    x: leftMargin,
+    y: y,
+    size: 13,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 25;
+
+  // Three columns
+  const col1X = leftMargin;
+  const col2X = 220;
+  const col3X = 390;
+  const colWidth = 160;
+
+  // Column headers
+  page.drawText('Auftraggeberin', {
+    x: col1X,
+    y: y,
+    size: 9,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Beauftragte', {
+    x: col2X,
+    y: y,
+    size: 9,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Mitbeauftragte', {
+    x: col3X,
+    y: y,
+    size: 9,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 15;
+
+  // Column data
+  const clientLines = [
+    `${userData.firstName} ${userData.lastName}`,
+    userData.address,
+    `CH-${userData.postalCode} ${userData.city}`
+  ];
+
+  const beauftragteLines = [
+    'Howden Broker Service Schweiz AG',
+    'Picardiestrasse 3A',
+    'CH-5040 Schoftland'
+  ];
+
+  const mitbeauftragteLines = [
+    '',
+    '',
+    'CH-'
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    page.drawText(clientLines[i], {
+      x: col1X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText(beauftragteLines[i], {
+      x: col2X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText(mitbeauftragteLines[i], {
+      x: col3X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5)
+    });
+
+    y -= 12;
+  }
+
+  y -= 15;
+
+  // Main text - justified
+  const mainText = [
+    'Mit Wirkung zum Datum der Unterzeichnung beauftragt die Auftraggeberin die Beauftragte sowie die Mitbeauftragte mit',
+    'der Uberprufung, Gestaltung, Koordination, dem Abschluss und der Betreuung samtlicher Versicherungsvertrage. Dies',
+    'gilt auch fur die Tochtergesellschaften der Auftraggeberin. Sowohl die Beauftragte als auch die Mitbeauftragte sind',
+    'ermachtigt, dazu im Namen der Auftraggeberin aufzutreten.'
+  ];
+
+  mainText.forEach(line => {
+    page.drawText(line, {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= 11;
+  });
+
+  y -= 8;
+
+  page.drawText('Diese Vollmacht berechtigt sowohl die Beauftragte wie auch die Mitbeauftragte insbesondere,', {
+    x: leftMargin,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 11;
+
+  // Bullet points
+  const bullets = [
+    '  Versicherungsofferten einzuholen;',
+    '  Mit den Anbietenden zu verhandeln;',
+    '  Versicherungen nach Rucksprache mit der Auftraggeberin zu platzieren und zu kundigen und',
+    '  In Schadenfallen die Interessen der Auftraggeberin zu vertreten (einschliesslich Einsicht in das gesamte Dossier).'
+  ];
+
+  bullets.forEach(bullet => {
+    page.drawText(bullet, {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= 11;
+  });
+
+  y -= 8;
+
+  // Additional paragraphs
+  const additionalParas = [
+    'Die Vollmacht umfasst auch die Beschaffung und die Weitergabe erforderlicher Risikoinformationen aus bestehenden',
+    'und abgelaufenen Versicherungsvertragen.',
+    '',
+    'Der Auftrag ist gemass den Bestimmungen des schweizerischen Obligationenrechts jederzeit widerrufbar.'
+  ];
+
+  additionalParas.forEach(para => {
+    page.drawText(para, {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= 11;
+  });
+
+  y -= 10;
+
+  // Confirmation section
+  page.drawText('Die Auftraggeberin bestatigt mit ihrer Unterschrift, Folgendes erhalten zu haben:', {
+    x: leftMargin,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 11;
+
+  const checkItems = [
+    '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Beauftragten (Anhang 1)',
+    '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Mitbeauftragten',
+    '  Offenlegung der Entschadigung nach Art. 45b Versicherungsaufsichtsgesetz (VAG) (Anhang 2)',
+    '  Allgemeine Geschaftsbedingungen (AGB), Version Co-Broker (Anhang 3)'
+  ];
+
+  checkItems.forEach(item => {
+    page.drawText(item, {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    y -= 11;
+  });
+
+  y -= 20;
+
+  // Signature section
+  const currentDate = new Date().toLocaleDateString('de-CH');
+
+  // Dates row
+  page.drawText(`Ort, Datum, ${userData.city}, ${currentDate}`, {
+    x: col1X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText(`Schoftland, ${currentDate}`, {
+    x: col2X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Ort, Datum, _______________', {
+    x: col3X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 15;
+
+  // Role labels
+  page.drawText('Auftraggeberin', {
+    x: col1X,
+    y: y,
+    size: 8,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Beauftragte', {
+    x: col2X,
+    y: y,
+    size: 8,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Mitbeauftragte', {
+    x: col3X,
+    y: y,
+    size: 8,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 15;
+
+  // First signature lines
+  page.drawText('________________________', {
+    x: col1X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('_________________________', {
+    x: col2X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('_______________________', {
+    x: col3X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 11;
+
+  // Names
+  page.drawText(`${userData.firstName} ${userData.lastName}`, {
+    x: col1X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('Howden Broker Service Schweiz AG', {
+    x: col2X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 15;
+
+  // Second signature lines
+  page.drawText('________________________', {
+    x: col1X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('_________________________', {
+    x: col2X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  page.drawText('_______________________', {
+    x: col3X,
+    y: y,
+    size: 9,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  y -= 11;
+
+  page.drawText('Howden Broker Service Schweiz AG', {
+    x: col2X,
+    y: y,
+    size: 8,
+    font,
+    color: rgb(0, 0, 0)
+  });
+
+  console.log('✅ Application PDF created with logo on right side');
+  return pdfDoc;
+}
+
+  /**
+   * Get German month name
+   */
+  private getGermanMonth(monthIndex: number): string {
+    const months = [
+      'Januar', 'Februar', 'Marz', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+    ];
+    return months[monthIndex];
   }
 
   /**
-   * Helper: Get insurer addresses for major Swiss health insurers
+   * Get insurer addresses
    */
   private getInsurerAddress(insurerName: string): { street: string; postal: string; city: string } | null {
     const addresses: Record<string, { street: string; postal: string; city: string }> = {
       'CSS Versicherung AG': { street: 'Tribschenstrasse 21', postal: '6002', city: 'Luzern' },
       'CSS': { street: 'Tribschenstrasse 21', postal: '6002', city: 'Luzern' },
-      'Helsana': { street: 'Auzelg 18', postal: '8010', city: 'Zürich' },
-      'Helsana Versicherungen AG': { street: 'Auzelg 18', postal: '8010', city: 'Zürich' },
-      'Swica': { street: 'Römerstrasse 38', postal: '8401', city: 'Winterthur' },
-      'Swica Krankenversicherung AG': { street: 'Römerstrasse 38', postal: '8401', city: 'Winterthur' },
+      'Helsana': { street: 'Auzelg 18', postal: '8010', city: 'Zurich' },
+      'Helsana Versicherungen AG': { street: 'Auzelg 18', postal: '8010', city: 'Zurich' },
+      'Swica': { street: 'Romerstrasse 38', postal: '8401', city: 'Winterthur' },
+      'Swica Krankenversicherung AG': { street: 'Romerstrasse 38', postal: '8401', city: 'Winterthur' },
       'Concordia': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
-      'Sanitas': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
-      'Sanitas Krankenversicherung': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
+      'Sanitas': { street: 'Jagergasse 3', postal: '8021', city: 'Zurich' },
+      'Sanitas Krankenversicherung': { street: 'Jagergasse 3', postal: '8021', city: 'Zurich' },
       'KPT/CPT': { street: 'Weststrasse 10', postal: '3000', city: 'Bern 6' },
       'KPT': { street: 'Weststrasse 10', postal: '3000', city: 'Bern 6' },
       'Visana': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 15' },
       'Visana Services AG': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 15' },
-      'Groupe Mutuel': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'Groupe Mutuel': { street: 'Rue des Cedres 5', postal: '1919', city: 'Martigny' },
       'Sympany': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
-      'Assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
-      'Assura-Basis AG': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' }
-    };
-
-    return addresses[insurerName] || null;
-  }
-
-  /**
-   * DEPRECATED: Old template-based methods (keeping for compatibility but not using)
-   */
-  private async createSimpleCancellationPDF(userData: UserFormData, currentInsurer: string): Promise<Buffer> {
-    // This method is now replaced by createCancellationWithUserData
-    const pdfDoc = await this.createCancellationWithUserData(userData, currentInsurer);
-    const pdfBytes = await pdfDoc.save();
-    return Buffer.from(pdfBytes);
-  }
-
-  private async createSimpleApplicationPDF(userData: UserFormData, selectedInsurance: SelectedInsurance): Promise<Buffer> {
-    // This method is now replaced by createApplicationWithUserData  
-    const pdfDoc = await this.createApplicationWithUserData(userData, selectedInsurance);
-    const pdfBytes = await pdfDoc.save();
-    return Buffer.from(pdfBytes);
-  }
-
-  /**
-   * Validate templates exist and are readable
-   */
-  async validateTemplates(): Promise<{
-    cancellationTemplate: boolean;
-    applicationTemplate: boolean;
-    errors: string[];
-  }> {
-    // Since we're creating PDFs from scratch, templates are optional
-    return {
-      cancellationTemplate: true,
-      applicationTemplate: true,
-      errors: []
-    };
-  }
-
-  /**
-   * Initialize template directory
-   */
-  static async initializeTemplates(): Promise<void> {
-    const templatesDir = path.join(process.cwd(), 'public', 'documents');
-    
-    try {
-      await fs.access(templatesDir);
-      console.log('Documents directory exists:', templatesDir);
-    } catch {
-      await fs.mkdir(templatesDir, { recursive: true });
-      console.log('Created documents directory:', templatesDir);
-    }
-  }
+      'Assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009',city: 'Pully' },
+'Assura-Basis AG': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' }
+};
+return addresses[insurerName] || null;
+}
+async validateTemplates(): Promise<{
+cancellationTemplate: boolean;
+applicationTemplate: boolean;
+errors: string[];
+}> {
+return {
+cancellationTemplate: true,
+applicationTemplate: true,
+errors: []
+};
+}
+static async initializeTemplates(): Promise<void> {
+const templatesDir = path.join(process.cwd(), 'public', 'documents');
+try {
+  await fs.access(templatesDir);
+  console.log('Documents directory exists:', templatesDir);
+} catch {
+  await fs.mkdir(templatesDir, { recursive: true });
+  console.log('Created documents directory:', templatesDir);
+}
+}
 }

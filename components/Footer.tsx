@@ -10,8 +10,8 @@ const Footer = () => {
             <li className="font-semibold">Unternehmen</li>
             <li><Link href="/impressum" className="hover:underline">Impressum</Link></li>
             <li><Link href="/ueber-findbetter" className="hover:underline">Über Findbetter.ch</Link></li>
-            <li className="hover:underline cursor-pointer">Unser Service</li>
-            <li className="hover:underline cursor-pointer">Medien</li>
+            {/* <li className="hover:underline cursor-pointer">Unser Service</li>
+            <li className="hover:underline cursor-pointer">Medien</li> */}
           </ul>
         </div>
 
@@ -20,10 +20,29 @@ const Footer = () => {
           <h3 className="text-lg font-bold mb-4">Richtlinien</h3>
           <ul className="space-y-2">
             <li><Link href="/datenschutz" className="hover:underline">Datenschutzbestimmungen</Link></li>
-            <li className="hover:underline cursor-pointer">Informationen nach Artikel 45</li>
-            <li className="hover:underline cursor-pointer">Allgemeine Geschäftsbedingungen</li>
-            <li className="hover:underline cursor-pointer">Auftrag und Vollmacht</li>
-            <li className="hover:underline cursor-pointer">Vollmacht zur Kündigung</li>
+            <li className="hover:underline cursor-pointer">
+              <a target="_blank" rel="noopener noreferrer" href="/documents/Informationen_nach_Artikel.pdf">
+                Informationen nach Artikel 45
+              </a>
+            </li>
+            <li className="hover:underline cursor-pointer"></li>
+            <li className="hover:underline cursor-pointer">
+              <a target="_blank" rel="noopener noreferrer" href="/documents/Allgemeine_geschaftsbedingungen.pdf">
+                Allgemeine Geschäftsbedingungen
+              </a>
+            </li>
+            <li className="hover:underline cursor-pointer"></li>
+            <li className="hover:underline cursor-pointer">
+              <a target="_blank" rel="noopener noreferrer" href="/documents/Muster_Brokermandat_DE_Vollmandat.pdf">
+                Auftrag und Vollmacht
+              </a>
+            </li>
+            <li className="hover:underline cursor-pointer">
+              <a target="_blank" rel="noopener noreferrer" href="/documents/Vollmacht_zur_Kundigung.pdf">
+                Vollmacht zur Kündigung
+              </a>
+            </li>
+            <li className="hover:underline cursor-pointer"></li>
           </ul>
         </div>
 
@@ -31,11 +50,11 @@ const Footer = () => {
         <div>
           <h3 className="text-lg font-bold mb-4">Socialmedia</h3>
           <ul className="space-y-2">
-            <li className="hover:underline cursor-pointer">Instagram</li>
-            <li className="hover:underline cursor-pointer">Facebook</li>
-            <li className="hover:underline cursor-pointer">TikTok</li>
-            <li className="hover:underline cursor-pointer">LinkedIn</li>
-            <li className="hover:underline cursor-pointer">X</li>
+            <li className="hover:underline cursor-pointer"> <a target="_blank" href="https://www.instagram.com/findbetter.ch/?utm_source=ig_web_button_share_sheet">Instagram</a> </li>
+            <li className="hover:underline cursor-pointer"><a target="_blank" href="https://www.facebook.com/share/1CacPXGGk4/?mibextid=wwXIfr">Facebook </a></li>
+            <li className="hover:underline cursor-pointer"><a target="_blank" href="https://www.tiktok.com/@findbetter.ch?lang=de-DE">TikTok</a></li>
+            <li className="hover:underline cursor-pointer"><a target="_blank" href="https://www.linkedin.com/company/findbetter-ch/about/?viewAsMember=true">LinkedIn </a></li>
+            <li className="hover:underline cursor-pointer"><a target="_blank" href="https://x.com/Findbetter_ch">X</a></li>
           </ul>
         </div>
       </div>

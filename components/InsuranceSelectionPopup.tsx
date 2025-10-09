@@ -16,11 +16,13 @@ const InsuranceSelectionPopup = ({
   birthDate: searchCriteria?.geburtsdatum || '',
   phone: '',
   email: '',
-  address: '',
+  address: searchCriteria?.fullAddress || '',
   nationality: '',
   ahvNumber: '',
-  currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
-  currentPolicyNumber: '',
+  currentInsurer: selectedInsurance?.insurerName 
+    || selectedInsurance?.Insurer 
+    || selectedInsurance?.Versicherer 
+    || (searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : ''),  currentPolicyNumber: '',
   insuranceStartDate: searchCriteria?.newToSwitzerland && searchCriteria?.entryDate 
     ? searchCriteria.entryDate 
     : '2026-01-01',
@@ -42,18 +44,30 @@ const InsuranceSelectionPopup = ({
   const [currentStep, setCurrentStep] = useState('form');
 
   useEffect(() => {
+    const updates = {};
+    
     if (searchCriteria?.newToSwitzerland && searchCriteria?.entryDate) {
-      setFormData(prev => ({
-        ...prev,
-        insuranceStartDate: searchCriteria.entryDate
-      }));
+      updates.insuranceStartDate = searchCriteria.entryDate;
     } else {
-      setFormData(prev => ({
-        ...prev,
-        insuranceStartDate: '2026-01-01'
-      }));
+      updates.insuranceStartDate = '2026-01-01';
     }
-  }, [searchCriteria?.newToSwitzerland, searchCriteria?.entryDate]);
+    
+    if (searchCriteria?.fullAddress) {
+      updates.address = searchCriteria.fullAddress;
+    }
+    
+    if (selectedInsurance?.insurerName || selectedInsurance?.Insurer) {
+      updates.currentInsurer = selectedInsurance.insurerName || selectedInsurance.Insurer;
+    }
+    
+    setFormData(prev => ({ ...prev, ...updates }));
+  }, [
+    searchCriteria?.newToSwitzerland, 
+    searchCriteria?.entryDate, 
+    searchCriteria?.fullAddress,
+    selectedInsurance?.insurerName,
+    selectedInsurance?.Insurer
+  ]);
 
   const validateForm = () => {
     const errors = {};
@@ -67,7 +81,6 @@ const InsuranceSelectionPopup = ({
       { key: 'currentInsurer', label: 'Aktuelle Krankenversicherung' }
     ];
 
-    // Add AHV validation only if NOT new to Switzerland
     if (!searchCriteria?.newToSwitzerland) {
       if (!formData.ahvNumber?.trim()) {
         errors.ahvNumber = 'AHV-Nummer ist erforderlich';
@@ -165,7 +178,6 @@ const InsuranceSelectionPopup = ({
 
       console.log('STEP 1: Saving user to database first...');
 
-      // STEP 1: Save user to database FIRST
       const userPayload = {
         salutation: formData.salutation,
         firstName: formData.firstName.trim(),
@@ -212,7 +224,6 @@ const InsuranceSelectionPopup = ({
         }
       };
 
-      // Save user to database
       const userResponse = await fetch('/api/users', {
         method: 'POST',
         headers: {
@@ -229,7 +240,6 @@ const InsuranceSelectionPopup = ({
       const { userId } = await userResponse.json();
       console.log('✅ User saved to database with ID:', userId);
 
-      // STEP 2: Upload ID documents if provided
       if (formData.idDocumentFrontBase64 || formData.idDocumentBackBase64) {
         console.log('STEP 2: Uploading ID documents...');
         
@@ -257,7 +267,6 @@ const InsuranceSelectionPopup = ({
         }
       }
 
-      // STEP 3: Process Skribble documents
       console.log('STEP 3: Processing Skribble documents...');
       
       const skribblePayload = {
@@ -284,7 +293,6 @@ const InsuranceSelectionPopup = ({
       const result = await skribbleResponse.json();
       console.log('✅ Documents created successfully:', result);
 
-      // Store session data
       sessionStorage.setItem('skribble_session', JSON.stringify({
         userId: userId,
         sessionId: result.sessionId,
@@ -292,7 +300,6 @@ const InsuranceSelectionPopup = ({
         timestamp: Date.now()
       }));
 
-      // Redirect to success page
       await new Promise(resolve => setTimeout(resolve, 1000));
       window.location.href = '/success';
 
@@ -374,11 +381,11 @@ const InsuranceSelectionPopup = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative">
-        <div className="p-8">
+        <div className="p-6 sm:p-8">
           <button 
             onClick={handleClose}
             disabled={submitting}
-            className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors z-10 disabled:cursor-not-allowed"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors z-10 disabled:cursor-not-allowed"
           >
             <X className="w-6 h-6" />
           </button>
@@ -414,10 +421,10 @@ const InsuranceSelectionPopup = ({
 
           {currentStep === 'form' && (
             <>
-              <h3 className="text-2xl font-bold text-gray-800 text-center mb-2">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 text-center mb-2">
                 Persönliche Angaben für Versicherungswechsel
               </h3>
-              <p className="text-center text-gray-600 mb-2">
+              <p className="text-center text-sm sm:text-base text-gray-600 mb-2">
                 Gewählte Versicherung: <span className="font-semibold text-gray-800">{selectedInsurance?.insurerName || selectedInsurance?.Insurer || selectedInsurance?.Versicherer}</span>
               </p>
               <div className="text-center mb-6">
@@ -441,13 +448,14 @@ const InsuranceSelectionPopup = ({
               )}
               
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                  <div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+                  {/* Salutation */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="salutation" className="block text-sm font-medium text-gray-700 mb-1">
                       Anrede
                     </label>
-                    <select 
-                      id="salutation" 
+                    <select
+                      id="salutation"
                       value={formData.salutation}
                       onChange={handleInputChange}
                       className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
@@ -456,15 +464,18 @@ const InsuranceSelectionPopup = ({
                       <option value="Frau">Frau</option>
                     </select>
                   </div>
-                  <div></div>
+
+                  {/* Empty placeholder for large screens */}
+                  <div className="hidden lg:block lg:col-span-1"></div>
                   
-                  <div>
+                  {/* First Name */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
                       Vorname*
                     </label>
-                    <input 
-                      type="text" 
-                      id="firstName" 
+                    <input
+                      type="text"
+                      id="firstName"
                       value={formData.firstName}
                       onChange={handleInputChange}
                       className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
@@ -476,14 +487,15 @@ const InsuranceSelectionPopup = ({
                       <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
                     )}
                   </div>
-                  
-                  <div>
+
+                  {/* Last Name */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
                       Nachname*
                     </label>
-                    <input 
-                      type="text" 
-                      id="lastName" 
+                    <input
+                      type="text"
+                      id="lastName"
                       value={formData.lastName}
                       onChange={handleInputChange}
                       className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
@@ -496,13 +508,14 @@ const InsuranceSelectionPopup = ({
                     )}
                   </div>
                   
-                  <div>
+                  {/* Birth Date */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Geburtsdatum*
                     </label>
-                    <input 
-                      type="date" 
-                      id="birthDate" 
+                    <input
+                      type="date"
+                      id="birthDate"
                       value={formData.birthDate}
                       onChange={handleInputChange}
                       max={new Date().toISOString().split('T')[0]}
@@ -516,13 +529,14 @@ const InsuranceSelectionPopup = ({
                     )}
                   </div>
                   
-                  <div>
+                  {/* Phone */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                       Telefonnummer*
                     </label>
-                    <input 
-                      type="tel" 
-                      id="phone" 
+                    <input
+                      type="tel"
+                      id="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
                       placeholder="z.B. +41 79 123 45 67"
@@ -536,13 +550,14 @@ const InsuranceSelectionPopup = ({
                     )}
                   </div>
                   
-                  <div>
+                  {/* Email */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                       E-Mail*
                     </label>
-                    <input 
-                      type="email" 
-                      id="email" 
+                    <input
+                      type="email"
+                      id="email"
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder="ihre.email@beispiel.com"
@@ -556,19 +571,22 @@ const InsuranceSelectionPopup = ({
                     )}
                   </div>
                   
-                  <div>
+                  {/* Address */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
                       Adresse*
                     </label>
-                    <input 
-                      type="text" 
-                      id="address" 
+                    <input
+                      type="text"
+                      id="address"
                       value={formData.address}
                       onChange={handleInputChange}
                       placeholder="Straße Nr, PLZ Ort"
+                      disabled={!!searchCriteria?.fullAddress}
+                      readOnly={!!searchCriteria?.fullAddress}
                       className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
                         validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
+                      } ${searchCriteria?.fullAddress ? 'bg-gray-200 cursor-not-allowed' : ''}`}
                       required
                     />
                     {validationErrors.address && (
@@ -576,38 +594,64 @@ const InsuranceSelectionPopup = ({
                     )}
                   </div>
 
-                  <div>
-                    <label htmlFor="currentInsurer" className="block text-sm font-medium text-gray-700 mb-1">
+                  {/* Current Insurer */}
+                  <div className="w-full lg:col-span-1">
+                    <label
+                      htmlFor="currentInsurer"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
                       Aktuelle Krankenversicherung*
                     </label>
-                    <select 
-                      id="currentInsurer" 
-                      value={formData.currentInsurer}
+                    <select
+                      id="currentInsurer"
+                      name="currentInsurer"
+                      value={formData.currentInsurer || ""}
                       onChange={handleInputChange}
+                      disabled={!!(
+                        selectedInsurance?.insurerName ||
+                        selectedInsurance?.Insurer ||
+                        selectedInsurance?.Versicherer
+                      )}
+                      readOnly={!!(
+                        selectedInsurance?.insurerName ||
+                        selectedInsurance?.Insurer ||
+                        selectedInsurance?.Versicherer
+                      )}
                       className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.currentInsurer ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        validationErrors.currentInsurer
+                          ? 'ring-2 ring-red-500 bg-red-50'
+                          : 'focus:ring-blue-500'
+                      } ${
+                        selectedInsurance?.insurerName ||
+                        selectedInsurance?.Insurer ||
+                        selectedInsurance?.Versicherer
+                          ? 'bg-gray-200 cursor-not-allowed'
+                          : ''
                       }`}
                       required
                     >
                       <option value="">Bitte wählen...</option>
-                      {swissInsuranceCompanies.map((company) => (
+                      {swissInsuranceCompanies.map((company: string) => (
                         <option key={company} value={company}>
                           {company}
                         </option>
                       ))}
                     </select>
                     {validationErrors.currentInsurer && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.currentInsurer}</p>
+                      <p className="mt-1 text-sm text-red-600">
+                        {validationErrors.currentInsurer}
+                      </p>
                     )}
                   </div>
-
-                  <div>
+                  
+                  {/* Current Policy Number */}
+                  <div className="w-full lg:col-span-1">
                     <label htmlFor="currentPolicyNumber" className="block text-sm font-medium text-gray-700 mb-1">
                       Aktuelle Policenummer
                     </label>
                     <input 
                       type="text" 
-                      id="currentPolicyNumber"  required
+                      id="currentPolicyNumber"
                       value={formData.currentPolicyNumber}
                       onChange={handleInputChange}
                       placeholder="hilft bei der Kündigung"
@@ -626,7 +670,7 @@ const InsuranceSelectionPopup = ({
 
                   {/* AHV Number - ONLY show when NOT new to Switzerland */}
                   {!isNewToSwitzerland && (
-                    <div>
+                    <div className="w-full lg:col-span-1">
                       <label htmlFor="ahvNumber" className="block text-sm font-medium text-gray-700 mb-1">
                         AHV-Nummer *
                       </label>
@@ -648,7 +692,7 @@ const InsuranceSelectionPopup = ({
                   )}
 
                   {/* Insurance Start Date - Non-editable for new residents, fixed for others */}
-                  <div>
+                  <div className="lg:col-span-1">
                     <label htmlFor="insuranceStartDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Gewünschter Versicherungsbeginn
                     </label>
@@ -673,7 +717,7 @@ const InsuranceSelectionPopup = ({
                   </div>
 
                   {/* Nationality */}
-                  <div>
+                  <div className="lg:col-span-1">
                     <label htmlFor="nationality" className="block text-sm font-medium text-gray-700 mb-1">
                       Staatsangehörigkeit
                     </label>
@@ -691,7 +735,7 @@ const InsuranceSelectionPopup = ({
                 {/* Checkboxes */}
                 <div className="space-y-4 pt-4 border-t border-gray-200">
                   <h4 className="font-medium text-gray-700 mb-4">Erforderliche Zustimmungen</h4>
-                  
+
                   <div className="flex items-start">
                     <input 
                       id="informationArt45" 
@@ -703,11 +747,16 @@ const InsuranceSelectionPopup = ({
                       }`}
                       required
                     />
-                    <label htmlFor="informationArt45" className="ml-3 text-sm text-blue-600 font-semibold">
+                    <a 
+                      href="/documents/Informationen_nach_Artikel.pdf" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
+                    >
                       Information nach Art. 45*
-                    </label>
+                    </a>
                   </div>
-                  
+
                   <div className="flex items-start">
                     <input 
                       id="agbAccepted" 
@@ -719,11 +768,16 @@ const InsuranceSelectionPopup = ({
                       }`}
                       required
                     />
-                    <label htmlFor="agbAccepted" className="ml-3 text-sm text-blue-600 font-semibold">
+                    <a 
+                      href="/documents/Allgemeine_geschaftsbedingungen.pdf" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
+                    >
                       AGB*
-                    </label>
+                    </a>
                   </div>
-                  
+
                   <div className="flex items-start">
                     <input 
                       id="mandateAccepted" 
@@ -735,11 +789,16 @@ const InsuranceSelectionPopup = ({
                       }`}
                       required
                     />
-                    <label htmlFor="mandateAccepted" className="ml-3 text-sm text-blue-600 font-semibold">
+                    <a 
+                      href="/documents/Muster_Brokermandat_DE_Vollmandat.pdf" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
+                    >
                       Auftrag und Vollmacht*
-                    </label>
+                    </a>
                   </div>
-                  
+
                   <div className="flex items-start">
                     <input 
                       id="terminationAuthority" 
@@ -751,11 +810,16 @@ const InsuranceSelectionPopup = ({
                       }`}
                       required
                     />
-                    <label htmlFor="terminationAuthority" className="ml-3 text-sm text-blue-600 font-semibold">
+                    <a 
+                      href="/documents/Vollmacht_zur_Kundigung.pdf" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
+                    >
                       Vollmacht zur Kündigung*
-                    </label>
+                    </a>
                   </div>
-                  
+
                   <div className="flex items-start">
                     <input 
                       id="consultationInterest" 
@@ -764,9 +828,9 @@ const InsuranceSelectionPopup = ({
                       onChange={handleInputChange}
                       className="h-4 w-4 text-gray-600 border-gray-300 rounded focus:ring-blue-500 mt-1" 
                     />
-                    <label htmlFor="consultationInterest" className="ml-3 text-sm text-gray-600 font-medium">
+                    <span className="ml-3 text-sm text-gray-600 font-medium">
                       Interesse an einer Beratung
-                    </label>
+                    </span>
                   </div>
                 </div>
                 

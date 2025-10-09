@@ -18,7 +18,7 @@ export class SkribbleService {
   constructor(config: SkribbleConfig) {
     this.config = {
       ...config,
-      baseUrl: config.baseUrl || 'https://api.skribble.de'
+      baseUrl: config.baseUrl || 'https://api.skribble.com'
     };
     this.pdfManager = new PDFTemplateManager();
     

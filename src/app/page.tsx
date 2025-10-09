@@ -162,10 +162,11 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 pb-20" id="calculator-section">
-        <div className="flex flex-col lg:flex-row justify-center items-start gap-8 relative">
+      <div className="container mx-auto px-4 sm:px-6 pb-20" id="calculator-section">
+        <div className="flex flex-col lg:flex-row justify-center items-start gap-6 lg:gap-8 relative">
+          
           {/* Left side - Forms */}
-          <div className="space-y-6 lg:w-auto flex-shrink-0" >
+          <div className="w-full lg:w-auto flex-shrink-0 space-y-6">
             <PremiumCalculator
               onResults={handleResults}
               onDebugInfo={setDebugInfo}
@@ -186,15 +187,17 @@ export default function Home() {
           </div>
 
           {/* Right side - Results */}
-          <div className="lg:flex-1">
+          <div className="w-full lg:flex-1">
             <ComparisonResult
               allPersonsResults={allPersonsResults}
               debugInfo={debugInfo}
               searchCriteria={searchCriteria}
             />
           </div>
+
         </div>
       </div>
+
       
       <FAQ />
       <Footer />
