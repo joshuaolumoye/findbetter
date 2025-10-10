@@ -448,9 +448,9 @@ const InsuranceSelectionPopup = ({
               )}
               
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
-                  {/* Salutation */}
-                  <div className="w-full lg:col-span-1">
+                <div className="flex flex-col gap-4 lg:gap-6">
+                  {/* Salutation - Full width on mobile, half on desktop */}
+                  <div className="w-full lg:w-1/2 lg:pr-4">
                     <label htmlFor="salutation" className="block text-sm font-medium text-gray-700 mb-1">
                       Anrede
                     </label>
@@ -465,201 +465,202 @@ const InsuranceSelectionPopup = ({
                     </select>
                   </div>
 
-                  {/* Empty placeholder for large screens */}
-                  <div className="hidden lg:block lg:col-span-1"></div>
-                  
-                  {/* First Name */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Vorname*
-                    </label>
-                    <input
-                      type="text"
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.firstName ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
-                      required
-                    />
-                    {validationErrors.firstName && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
-                    )}
-                  </div>
-
-                  {/* Last Name */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Nachname*
-                    </label>
-                    <input
-                      type="text"
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.lastName ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
-                      required
-                    />
-                    {validationErrors.lastName && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
-                    )}
-                  </div>
-                  
-                  {/* Birth Date */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
-                      Geburtsdatum*
-                    </label>
-                    <input
-                      type="date"
-                      id="birthDate"
-                      value={formData.birthDate}
-                      onChange={handleInputChange}
-                      max={new Date().toISOString().split('T')[0]}
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.birthDate ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
-                      required
-                    />
-                    {validationErrors.birthDate && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.birthDate}</p>
-                    )}
-                  </div>
-                  
-                  {/* Phone */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                      Telefonnummer*
-                    </label>
-                    <input
-                      type="tel"
-                      id="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      placeholder="z.B. +41 79 123 45 67"
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.phone ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
-                      required
-                    />
-                    {validationErrors.phone && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.phone}</p>
-                    )}
-                  </div>
-                  
-                  {/* Email */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                      E-Mail*
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="ihre.email@beispiel.com"
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.email ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      }`}
-                      required
-                    />
-                    {validationErrors.email && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
-                    )}
-                  </div>
-                  
-                  {/* Address */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                      Adresse*
-                    </label>
-                    <input
-                      type="text"
-                      id="address"
-                      value={formData.address}
-                      onChange={handleInputChange}
-                      placeholder="Straße Nr, PLZ Ort"
-                      disabled={!!searchCriteria?.fullAddress}
-                      readOnly={!!searchCriteria?.fullAddress}
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                      } ${searchCriteria?.fullAddress ? 'bg-gray-200 cursor-not-allowed' : ''}`}
-                      required
-                    />
-                    {validationErrors.address && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
-                    )}
-                  </div>
-
-                  {/* Current Insurer */}
-                  <div className="w-full lg:col-span-1">
-                    <label
-                      htmlFor="currentInsurer"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Aktuelle Krankenversicherung*
-                    </label>
-                    <select
-                      id="currentInsurer"
-                      name="currentInsurer"
-                      value={formData.currentInsurer || ""}
-                      onChange={handleInputChange}
-                      disabled={!!(
-                        selectedInsurance?.insurerName ||
-                        selectedInsurance?.Insurer ||
-                        selectedInsurance?.Versicherer
+                  {/* First Name & Last Name - Stack on mobile, side-by-side on desktop */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Vorname*
+                      </label>
+                      <input
+                        type="text"
+                        id="firstName"
+                        value={formData.firstName}
+                        onChange={handleInputChange}
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.firstName ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required
+                      />
+                      {validationErrors.firstName && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
                       )}
-                      readOnly={!!(
-                        selectedInsurance?.insurerName ||
-                        selectedInsurance?.Insurer ||
-                        selectedInsurance?.Versicherer
+                    </div>
+
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Nachname*
+                      </label>
+                      <input
+                        type="text"
+                        id="lastName"
+                        value={formData.lastName}
+                        onChange={handleInputChange}
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.lastName ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required
+                      />
+                      {validationErrors.lastName && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
                       )}
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.currentInsurer
-                          ? 'ring-2 ring-red-500 bg-red-50'
-                          : 'focus:ring-blue-500'
-                      } ${
-                        selectedInsurance?.insurerName ||
-                        selectedInsurance?.Insurer ||
-                        selectedInsurance?.Versicherer
-                          ? 'bg-gray-200 cursor-not-allowed'
-                          : ''
-                      }`}
-                      required
-                    >
-                      <option value="">Bitte wählen...</option>
-                      {swissInsuranceCompanies.map((company: string) => (
-                        <option key={company} value={company}>
-                          {company}
-                        </option>
-                      ))}
-                    </select>
-                    {validationErrors.currentInsurer && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {validationErrors.currentInsurer}
-                      </p>
-                    )}
+                    </div>
                   </div>
                   
-                  {/* Current Policy Number */}
-                  <div className="w-full lg:col-span-1">
-                    <label htmlFor="currentPolicyNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                      Aktuelle Policenummer
-                    </label>
-                    <input 
-                      type="text" 
-                      id="currentPolicyNumber"
-                      value={formData.currentPolicyNumber}
-                      onChange={handleInputChange}
-                      placeholder="hilft bei der Kündigung"
-                      className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors" 
-                    />
+                  {/* Birth Date & Phone - Stack on mobile, side-by-side on desktop */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
+                        Geburtsdatum*
+                      </label>
+                      <input
+                        type="date"
+                        id="birthDate"
+                        value={formData.birthDate}
+                        onChange={handleInputChange}
+                        max={new Date().toISOString().split('T')[0]}
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.birthDate ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required
+                      />
+                      {validationErrors.birthDate && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.birthDate}</p>
+                      )}
+                    </div>
+                    
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                        Telefonnummer*
+                      </label>
+                      <input
+                        type="tel"
+                        id="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="z.B. +41 79 123 45 67"
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.phone ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required
+                      />
+                      {validationErrors.phone && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Email & Address - Stack on mobile, side-by-side on desktop */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                        E-Mail*
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="ihre.email@beispiel.com"
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.email ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        }`}
+                        required
+                      />
+                      {validationErrors.email && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
+                      )}
+                    </div>
+                    
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                        Adresse*
+                      </label>
+                      <input
+                        type="text"
+                        id="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        placeholder="Straße Nr, PLZ Ort"
+                        disabled={!!searchCriteria?.fullAddress}
+                        readOnly={!!searchCriteria?.fullAddress}
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                        } ${searchCriteria?.fullAddress ? 'bg-gray-200 cursor-not-allowed' : ''}`}
+                        required
+                      />
+                      {validationErrors.address && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* ID Document Upload */}
+                  {/* Current Insurer & Policy Number - Stack on mobile, side-by-side on desktop */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
+                      <label
+                        htmlFor="currentInsurer"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Aktuelle Krankenversicherung*
+                      </label>
+                      <select
+                        id="currentInsurer"
+                        name="currentInsurer"
+                        value={formData.currentInsurer || ""}
+                        onChange={handleInputChange}
+                        disabled={!!(
+                          selectedInsurance?.insurerName ||
+                          selectedInsurance?.Insurer ||
+                          selectedInsurance?.Versicherer
+                        )}
+                        readOnly={!!(
+                          selectedInsurance?.insurerName ||
+                          selectedInsurance?.Insurer ||
+                          selectedInsurance?.Versicherer
+                        )}
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.currentInsurer
+                            ? 'ring-2 ring-red-500 bg-red-50'
+                            : 'focus:ring-blue-500'
+                        } ${
+                          selectedInsurance?.insurerName ||
+                          selectedInsurance?.Insurer ||
+                          selectedInsurance?.Versicherer
+                            ? 'bg-gray-200 cursor-not-allowed'
+                            : ''
+                        }`}
+                        required
+                      >
+                        <option value="">Bitte wählen...</option>
+                        {swissInsuranceCompanies.map((company: string) => (
+                          <option key={company} value={company}>
+                            {company}
+                          </option>
+                        ))}
+                      </select>
+                      {validationErrors.currentInsurer && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {validationErrors.currentInsurer}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="w-full lg:w-1/2">
+                      <label htmlFor="currentPolicyNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                        Aktuelle Policenummer
+                      </label>
+                      <input 
+                        type="text" 
+                        id="currentPolicyNumber"
+                        value={formData.currentPolicyNumber}
+                        onChange={handleInputChange}
+                        placeholder="hilft bei der Kündigung"
+                        className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* ID Document Upload - Full width */}
                   <DualIDUpload 
                     formData={formData}
                     setFormData={setFormData}
@@ -668,56 +669,57 @@ const InsuranceSelectionPopup = ({
                     setSubmitError={setSubmitError}
                   />
 
-                  {/* AHV Number - ONLY show when NOT new to Switzerland */}
-                  {!isNewToSwitzerland && (
-                    <div className="w-full lg:col-span-1">
-                      <label htmlFor="ahvNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                        AHV-Nummer *
+                  {/* AHV Number & Insurance Start Date - Stack on mobile, side-by-side on desktop */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    {!isNewToSwitzerland && (
+                      <div className="w-full lg:w-1/2">
+                        <label htmlFor="ahvNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                          AHV-Nummer *
+                        </label>
+                        <input 
+                          type="text" 
+                          id="ahvNumber" 
+                          value={formData.ahvNumber}
+                          onChange={handleInputChange}
+                          placeholder="756.XXXX.XXXX.XX"
+                          className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                            validationErrors.ahvNumber ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                          }`}
+                          required={!isNewToSwitzerland}
+                        />
+                        {validationErrors.ahvNumber && (
+                          <p className="mt-1 text-sm text-red-600">{validationErrors.ahvNumber}</p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className={`w-full ${!isNewToSwitzerland ? 'lg:w-1/2' : 'lg:w-1/2'}`}>
+                      <label htmlFor="insuranceStartDate" className="block text-sm font-medium text-gray-700 mb-1">
+                        Gewünschter Versicherungsbeginn
                       </label>
                       <input 
-                        type="text" 
-                        id="ahvNumber" 
-                        value={formData.ahvNumber}
+                        type="date" 
+                        id="insuranceStartDate" 
+                        value={formData.insuranceStartDate}
                         onChange={handleInputChange}
-                        placeholder="756.XXXX.XXXX.XX"
-                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                          validationErrors.ahvNumber ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                        }`}
-                        required={!isNewToSwitzerland}
+                        disabled={true}
+                        className="w-full bg-gray-200 border-0 rounded-lg p-3 text-gray-800 cursor-not-allowed focus:outline-none transition-colors"
                       />
-                      {validationErrors.ahvNumber && (
-                        <p className="mt-1 text-sm text-red-600">{validationErrors.ahvNumber}</p>
+                      {isNewToSwitzerland && searchCriteria?.entryDate && (
+                        <p className="mt-1 text-xs text-blue-600">
+                          ✓ Automatisch gesetzt basierend auf Ihrem Einreisedatum
+                        </p>
+                      )}
+                      {!isNewToSwitzerland && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Standard Versicherungsbeginn: 01.01.2026
+                        </p>
                       )}
                     </div>
-                  )}
-
-                  {/* Insurance Start Date - Non-editable for new residents, fixed for others */}
-                  <div className="lg:col-span-1">
-                    <label htmlFor="insuranceStartDate" className="block text-sm font-medium text-gray-700 mb-1">
-                      Gewünschter Versicherungsbeginn
-                    </label>
-                    <input 
-                      type="date" 
-                      id="insuranceStartDate" 
-                      value={formData.insuranceStartDate}
-                      onChange={handleInputChange}
-                      disabled={true}
-                      className="w-full bg-gray-200 border-0 rounded-lg p-3 text-gray-800 cursor-not-allowed focus:outline-none transition-colors"
-                    />
-                    {isNewToSwitzerland && searchCriteria?.entryDate && (
-                      <p className="mt-1 text-xs text-blue-600">
-                        ✓ Automatisch gesetzt basierend auf Ihrem Einreisedatum
-                      </p>
-                    )}
-                    {!isNewToSwitzerland && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        Standard Versicherungsbeginn: 01.01.2026
-                      </p>
-                    )}
                   </div>
 
-                  {/* Nationality */}
-                  <div className="lg:col-span-1">
+                  {/* Nationality - Full width on mobile, half on desktop */}
+                  <div className="w-full lg:w-1/2 lg:pr-4">
                     <label htmlFor="nationality" className="block text-sm font-medium text-gray-700 mb-1">
                       Staatsangehörigkeit
                     </label>
