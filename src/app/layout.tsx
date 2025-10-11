@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     "affordable Swiss health insurance",
   ],
   icons: {
-    icon: "/findbetter_favicon.png",
+    icon: "/favicon.png",
   },
   openGraph: {
     title: "FindBetter – Trusted Swiss Healthcare & Insurance Platform",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     siteName: "FindBetter",
     images: [
       {
-        url: "/findbetter_favicon.png",
+        url: "/favicon.png",
         width: 512,
         height: 512,
         alt: "FindBetter Logo",
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
     title: "FindBetter – Swiss Healthcare & Insurance Platform",
     description:
       "Compare, choose, and manage Swiss health insurance easily with FindBetter.",
-    images: ["/findbetter_favicon.png"],
+    images: ["/favicon.png"],
   },
   metadataBase: new URL("https://findbetter.ch"),
 };
@@ -63,6 +63,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.png" type="image/png" />
+      </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
