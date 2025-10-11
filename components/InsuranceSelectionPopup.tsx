@@ -587,7 +587,7 @@ const InsuranceSelectionPopup = ({
                     
                     <div className="w-full lg:w-1/2">
                       <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                        Adresse*
+                        PLZ und Ort*
                       </label>
                       <input
                         type="text"
