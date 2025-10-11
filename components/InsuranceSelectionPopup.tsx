@@ -10,32 +10,34 @@ const InsuranceSelectionPopup = ({
   isOpen
 }) => {
   const [formData, setFormData] = useState({
-  salutation: 'Herr',
-  firstName: '',
-  lastName: '',
-  birthDate: searchCriteria?.geburtsdatum || '',
-  phone: '',
-  email: '',
-  address: searchCriteria?.fullAddress || '',
-  nationality: '',
-  ahvNumber: '',
-  currentInsurer: selectedInsurance?.insurerName 
-    || selectedInsurance?.Insurer 
-    || selectedInsurance?.Versicherer 
-    || (searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : ''),  currentPolicyNumber: '',
-  insuranceStartDate: searchCriteria?.newToSwitzerland && searchCriteria?.entryDate 
-    ? searchCriteria.entryDate 
-    : '2026-01-01',
-  idDocumentFront: null,
-  idDocumentBack: null,
-  idDocumentFrontBase64: null,
-  idDocumentBackBase64: null,
-  informationArt45: false,
-  agbAccepted: false,
-  mandateAccepted: false,
-  terminationAuthority: false,
-  consultationInterest: false
-});
+    salutation: 'Herr',
+    firstName: '',
+    lastName: '',
+    birthDate: searchCriteria?.geburtsdatum || '',
+    phone: '',
+    email: '',
+    address: searchCriteria?.fullAddress || '',
+    street: '', // City/Street field
+    nationality: '',
+    ahvNumber: '',
+    currentInsurer: selectedInsurance?.insurerName 
+      || selectedInsurance?.Insurer 
+      || selectedInsurance?.Versicherer 
+      || (searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : ''),
+    currentPolicyNumber: '',
+    insuranceStartDate: searchCriteria?.newToSwitzerland && searchCriteria?.entryDate 
+      ? searchCriteria.entryDate 
+      : '2026-01-01',
+    idDocumentFront: null,
+    idDocumentBack: null,
+    idDocumentFrontBase64: null,
+    idDocumentBackBase64: null,
+    informationArt45: false,
+    agbAccepted: false,
+    mandateAccepted: false,
+    terminationAuthority: false,
+    consultationInterest: false
+  });
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -78,6 +80,7 @@ const InsuranceSelectionPopup = ({
       { key: 'phone', label: 'Telefonnummer' },
       { key: 'email', label: 'E-Mail' },
       { key: 'address', label: 'Adresse' },
+      { key: 'street', label: 'Stadt' }, // NEW: Make street required
       { key: 'currentInsurer', label: 'Aktuelle Krankenversicherung' }
     ];
 
@@ -174,9 +177,9 @@ const InsuranceSelectionPopup = ({
 
     try {
       const postalCode = searchCriteria?.plz || extractPostalCode(formData.address, '8001');
-      const city = extractCity(formData.address);
+      const city = extractCity(formData.address) || formData.street; // Use street field as city fallback
 
-      console.log('STEP 1: Saving user to database first...');
+      console.log('STEP 1: Saving user to database with street field...');
 
       const userPayload = {
         salutation: formData.salutation,
@@ -186,8 +189,9 @@ const InsuranceSelectionPopup = ({
         phone: formData.phone.trim(),
         birthDate: formData.birthDate,
         address: formData.address.trim(),
+        street: formData.street.trim(), // NEW: Include street in payload
         postalCode: postalCode,
-        city: city || '',
+        city: city || formData.street.trim(), // Use street as city
         nationality: formData.nationality.trim() || 'swiss',
         ahvNumber: searchCriteria?.newToSwitzerland ? null : (formData.ahvNumber.trim() || null),
         currentInsurancePolicyNumber: formData.currentPolicyNumber.trim() || null,
@@ -223,6 +227,12 @@ const InsuranceSelectionPopup = ({
           consultationInterest: formData.consultationInterest
         }
       };
+
+      console.log('Payload with street field:', {
+        address: userPayload.address,
+        street: userPayload.street,
+        city: userPayload.city
+      });
 
       const userResponse = await fetch('/api/users', {
         method: 'POST',
@@ -333,9 +343,13 @@ const InsuranceSelectionPopup = ({
         phone: '',
         email: '',
         address: '',
+        street: '',
         nationality: '',
         ahvNumber: '',
-        currentInsurer: searchCriteria?.aktuelleKK !== 'Aktuelle KK' ? searchCriteria?.aktuelleKK : '',
+        currentInsurer:
+          searchCriteria?.aktuelleKK !== 'Aktuelle KK'
+            ? searchCriteria?.aktuelleKK
+            : '',
         currentPolicyNumber: '',
         insuranceStartDate: '',
         idDocumentFront: null,
@@ -449,7 +463,7 @@ const InsuranceSelectionPopup = ({
               
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="flex flex-col gap-4 lg:gap-6">
-                  {/* Salutation - Full width on mobile, half on desktop */}
+                  {/* Salutation */}
                   <div className="w-full lg:w-1/2 lg:pr-4">
                     <label htmlFor="salutation" className="block text-sm font-medium text-gray-700 mb-1">
                       Anrede
@@ -465,7 +479,7 @@ const InsuranceSelectionPopup = ({
                     </select>
                   </div>
 
-                  {/* First Name & Last Name - Stack on mobile, side-by-side on desktop */}
+                  {/* First Name & Last Name */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
                       <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
@@ -506,7 +520,7 @@ const InsuranceSelectionPopup = ({
                     </div>
                   </div>
                   
-                  {/* Birth Date & Phone - Stack on mobile, side-by-side on desktop */}
+                  {/* Birth Date & Phone */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
                       <label htmlFor="birthDate" className="block text-sm font-medium text-gray-700 mb-1">
@@ -549,7 +563,7 @@ const InsuranceSelectionPopup = ({
                     </div>
                   </div>
                   
-                  {/* Email & Address - Stack on mobile, side-by-side on desktop */}
+                  {/* Email & Address */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -594,7 +608,28 @@ const InsuranceSelectionPopup = ({
                     </div>
                   </div>
 
-                  {/* Current Insurer & Policy Number - Stack on mobile, side-by-side on desktop */}
+                  {/* Street/City Field - REQUIRED */}
+                  <div className="w-full lg:w-1/2">
+                    <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-1">
+                      Stadt*
+                    </label>
+                    <input
+                      type="text"
+                      id="street"
+                      value={formData.street}
+                      onChange={handleInputChange}
+                      placeholder="z.B. Zürich"
+                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                        validationErrors.street ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                      }`}
+                      required
+                    />
+                    {validationErrors.street && (
+                      <p className="mt-1 text-sm text-red-600">{validationErrors.street}</p>
+                    )}
+                  </div>
+
+                  {/* Current Insurer & Policy Number */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
                       <label
@@ -669,7 +704,7 @@ const InsuranceSelectionPopup = ({
                     setSubmitError={setSubmitError}
                   />
 
-                  {/* AHV Number & Insurance Start Date - Stack on mobile, side-by-side on desktop */}
+                  {/* AHV Number & Insurance Start Date */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     {!isNewToSwitzerland && (
                       <div className="w-full lg:w-1/2">
@@ -718,7 +753,7 @@ const InsuranceSelectionPopup = ({
                     </div>
                   </div>
 
-                  {/* Nationality - Full width on mobile, half on desktop */}
+                  {/* Nationality */}
                   <div className="w-full lg:w-1/2 lg:pr-4">
                     <label htmlFor="nationality" className="block text-sm font-medium text-gray-700 mb-1">
                       Staatsangehörigkeit

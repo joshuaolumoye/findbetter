@@ -1,4 +1,4 @@
-// services/PDFTemplateManager.ts - WITH LOGO AND EXACT TEMPLATE MATCHING
+// services/PDFTemplateManager.ts - WITH STREET FIELD CONCATENATION
 import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
@@ -11,6 +11,7 @@ export interface UserFormData {
   phone: string;
   email: string;
   address: string;
+  street?: string; // NEW: Street field
   postalCode: string;
   city: string;
   nationality?: string;
@@ -40,6 +41,16 @@ export class PDFTemplateManager {
     this.templateBasePath = path.join(process.cwd(), 'public', 'documents');
     this.logoPath = path.join(process.cwd(), 'public', 'images', 'howden-logo.png');
     console.log('PDF Template Manager initialized with base path:', this.templateBasePath);
+  }
+
+  /**
+   * NEW HELPER: Format full address with street
+   */
+  private formatFullAddress(userData: UserFormData): string {
+    if (userData.street && userData.street.trim()) {
+      return `${userData.address} ${userData.street}`.trim();
+    }
+    return userData.address;
   }
 
   /**
@@ -73,7 +84,8 @@ export class PDFTemplateManager {
       name: `${userData.firstName} ${userData.lastName}`,
       email: userData.email,
       currentInsurer,
-      insuranceStartDate: userData.insuranceStartDate
+      insuranceStartDate: userData.insuranceStartDate,
+      fullAddress: this.formatFullAddress(userData)
     });
 
     try {
@@ -104,7 +116,8 @@ export class PDFTemplateManager {
     console.log('Starting application PDF generation with user data:', {
       name: `${userData.firstName} ${userData.lastName}`,
       insurer: selectedInsurance.insurer,
-      premium: selectedInsurance.premium
+      premium: selectedInsurance.premium,
+      fullAddress: this.formatFullAddress(userData)
     });
 
     try {
@@ -125,13 +138,13 @@ export class PDFTemplateManager {
   }
 
   /**
-   * Create cancellation PDF - exact match to template
+   * Create cancellation PDF - exact match to template with STREET
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
     currentInsurer: string
   ): Promise<PDFDocument> {
-    console.log('Creating cancellation PDF matching exact template...');
+    console.log('Creating cancellation PDF with full address (address + street)...');
     
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]); // A4
@@ -142,6 +155,9 @@ export class PDFTemplateManager {
     const lineHeight = 14;
     const leftMargin = 50;
     const rightColumnX = 320;
+
+    // Get full address with street
+    const fullAddress = this.formatFullAddress(userData);
 
     // Header instructions (light gray, smaller font)
     page.drawText('Tragen Sie Ihren Absender ein:', {
@@ -227,6 +243,7 @@ export class PDFTemplateManager {
     });
     leftY -= lineHeight;
 
+    // UPDATED: Use full address (address + street)
     page.drawText('Strasse, Nummer', {
       x: leftMargin,
       y: leftY,
@@ -235,7 +252,7 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
     leftY -= lineHeight;
-    page.drawText(userData.address, {
+    page.drawText(fullAddress, {
       x: leftMargin,
       y: leftY,
       size: 10,
@@ -476,162 +493,286 @@ export class PDFTemplateManager {
       color: rgb(0.4, 0.4, 0.4)
     });
 
-    console.log('✅ Cancellation PDF created matching exact template');
+    console.log('✅ Cancellation PDF created with full address (address + street)');
     return pdfDoc;
   }
 
   /**
-   * Create application PDF with logo - exact match to template
+   * Create application PDF with logo and full address - exact match to template
    */
-  // Update the createApplicationWithUserData method in PDFTemplateManager.ts
-
-/**
- * Create application PDF with logo - exact match to template
- */
-private async createApplicationWithUserData(
-  userData: UserFormData,
-  selectedInsurance: SelectedInsurance
-): Promise<PDFDocument> {
-  console.log('Creating application PDF with logo and exact template match...');
-  
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595, 842]);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  let y = 800;
-  const lineHeight = 14;
-  const leftMargin = 50;
-
-  // Try to embed logo on the RIGHT side and make it BIGGER
-  const logo = await this.embedLogo(pdfDoc);
-  if (logo) {
-    // Increased scale from 0.15 to 0.35 for bigger logo
-    const logoDims = logo.scale(0.35);
+  private async createApplicationWithUserData(
+    userData: UserFormData,
+    selectedInsurance: SelectedInsurance
+  ): Promise<PDFDocument> {
+    console.log('Creating application PDF with logo and full address (address + street)...');
     
-    // Position on RIGHT side: page width (595) - logo width - right margin (50)
-    const logoX = 595 - logoDims.width - 50;
-    
-    page.drawImage(logo, {
-      x: logoX,
-      y: y - logoDims.height,
-      width: logoDims.width,
-      height: logoDims.height,
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    let y = 800;
+    const lineHeight = 14;
+    const leftMargin = 50;
+
+    // Get full address with street
+    const fullAddress = this.formatFullAddress(userData);
+
+    // Try to embed logo on the RIGHT side
+    const logo = await this.embedLogo(pdfDoc);
+    if (logo) {
+      const logoDims = logo.scale(0.35);
+      const logoX = 595 - logoDims.width - 50;
+      
+      page.drawImage(logo, {
+        x: logoX,
+        y: y - logoDims.height,
+        width: logoDims.width,
+        height: logoDims.height,
+      });
+      
+      console.log('✅ Logo positioned on right side');
+    }
+
+    // Header - Company address
+    page.drawText('Howden Broker Service Schweiz AG, Picardiestrasse 3A, CH-5040 Schoftland', {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0.4, 0.4, 0.4)
     });
-    
-    // Don't move y down since logo is on the right
-    console.log('✅ Logo positioned on right side:', {
-      x: logoX,
-      y: y - logoDims.height,
-      width: logoDims.width,
-      height: logoDims.height
+
+    y -= 12;
+
+    // FINMA and page number
+    page.drawText('FINMA Nr.: F01064059 | howdengroup.com - Version 07.2025', {
+      x: leftMargin,
+      y: y,
+      size: 7,
+      font,
+      color: rgb(0.4, 0.4, 0.4)
     });
-  }
 
-  // Header - Company address (matching template exactly)
-  page.drawText('Howden Broker Service Schweiz AG, Picardiestrasse 3A, CH-5040 Schoftland', {
-    x: leftMargin,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0.4, 0.4, 0.4)
-  });
+    page.drawText('Seite 1 von 6', {
+      x: 500,
+      y: y,
+      size: 7,
+      font,
+      color: rgb(0.4, 0.4, 0.4)
+    });
 
-  y -= 12;
+    y -= 25;
 
-  // FINMA and page number
-  page.drawText('FINMA Nr.: F01064059 | howdengroup.com - Version 07.2025', {
-    x: leftMargin,
-    y: y,
-    size: 7,
-    font,
-    color: rgb(0.4, 0.4, 0.4)
-  });
+    // Title - Bold
+    page.drawText('Brokermandat', {
+      x: leftMargin,
+      y: y,
+      size: 16,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-  page.drawText('Seite 1 von 6', {
-    x: 500,
-    y: y,
-    size: 7,
-    font,
-    color: rgb(0.4, 0.4, 0.4)
-  });
+    y -= 20;
+    page.drawText('Auftrag und Vollmacht', {
+      x: leftMargin,
+      y: y,
+      size: 13,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-  y -= 25;
+    y -= 25;
 
-  // Title - Bold
-  page.drawText('Brokermandat', {
-    x: leftMargin,
-    y: y,
-    size: 16,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
+    // Three columns
+    const col1X = leftMargin;
+    const col2X = 220;
+    const col3X = 390;
 
-  y -= 20;
-  page.drawText('Auftrag und Vollmacht', {
-    x: leftMargin,
-    y: y,
-    size: 13,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
+    // Column headers
+    page.drawText('Auftraggeberin', {
+      x: col1X,
+      y: y,
+      size: 9,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-  y -= 25;
+    page.drawText('Beauftragte', {
+      x: col2X,
+      y: y,
+      size: 9,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-  // Three columns
-  const col1X = leftMargin;
-  const col2X = 220;
-  const col3X = 390;
-  const colWidth = 160;
+    page.drawText('Mitbeauftragte', {
+      x: col3X,
+      y: y,
+      size: 9,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
 
-  // Column headers
-  page.drawText('Auftraggeberin', {
-    x: col1X,
-    y: y,
-    size: 9,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
+    y -= 15;
 
-  page.drawText('Beauftragte', {
-    x: col2X,
-    y: y,
-    size: 9,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
+    // UPDATED: Column data with full address
+    const clientLines = [
+      `${userData.firstName} ${userData.lastName}`,
+      fullAddress, // NOW INCLUDES STREET
+      `CH-${userData.postalCode} ${userData.city}`
+    ];
 
-  page.drawText('Mitbeauftragte', {
-    x: col3X,
-    y: y,
-    size: 9,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
+    const beauftragteLines = [
+      'Howden Broker Service Schweiz AG',
+      'Picardiestrasse 3A',
+      'CH-5040 Schoftland'
+    ];
 
-  y -= 15;
+    const mitbeauftragteLines = [
+      '',
+      '',
+      'CH-'
+    ];
 
-  // Column data
-  const clientLines = [
-    `${userData.firstName} ${userData.lastName}`,
-    userData.address,
-    `CH-${userData.postalCode} ${userData.city}`
-  ];
+    for (let i = 0; i < 3; i++) {
+      page.drawText(clientLines[i], {
+        x: col1X,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
 
-  const beauftragteLines = [
-    'Howden Broker Service Schweiz AG',
-    'Picardiestrasse 3A',
-    'CH-5040 Schoftland'
-  ];
+      page.drawText(beauftragteLines[i], {
+        x: col2X,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
 
-  const mitbeauftragteLines = [
-    '',
-    '',
-    'CH-'
-  ];
+      page.drawText(mitbeauftragteLines[i], {
+        x: col3X,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
+      });
 
-  for (let i = 0; i < 3; i++) {
-    page.drawText(clientLines[i], {
+      y -= 12;
+    }
+
+    y -= 15;
+
+    // Main text - justified
+    const mainText = [
+      'Mit Wirkung zum Datum der Unterzeichnung beauftragt die Auftraggeberin die Beauftragte sowie die Mitbeauftragte mit',
+      'der Uberprufung, Gestaltung, Koordination, dem Abschluss und der Betreuung samtlicher Versicherungsvertrage. Dies',
+      'gilt auch fur die Tochtergesellschaften der Auftraggeberin. Sowohl die Beauftragte als auch die Mitbeauftragte sind',
+      'ermachtigt, dazu im Namen der Auftraggeberin aufzutreten.'
+    ];
+
+    mainText.forEach(line => {
+      page.drawText(line, {
+        x: leftMargin,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      y -= 11;
+    });
+
+    y -= 8;
+
+    page.drawText('Diese Vollmacht berechtigt sowohl die Beauftragte wie auch die Mitbeauftragte insbesondere,', {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 11;
+
+    // Bullet points
+    const bullets = [
+      '  Versicherungsofferten einzuholen;',
+      '  Mit den Anbietenden zu verhandeln;',
+      '  Versicherungen nach Rucksprache mit der Auftraggeberin zu platzieren und zu kundigen und',
+      '  In Schadenfallen die Interessen der Auftraggeberin zu vertreten (einschliesslich Einsicht in das gesamte Dossier).'
+    ];
+
+    bullets.forEach(bullet => {
+      page.drawText(bullet, {
+        x: leftMargin,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      y -= 11;
+    });
+
+    y -= 8;
+
+    // Additional paragraphs
+    const additionalParas = [
+      'Die Vollmacht umfasst auch die Beschaffung und die Weitergabe erforderlicher Risikoinformationen aus bestehenden',
+      'und abgelaufenen Versicherungsvertragen.',
+      '',
+      'Der Auftrag ist gemass den Bestimmungen des schweizerischen Obligationenrechts jederzeit widerrufbar.'
+    ];
+
+    additionalParas.forEach(para => {
+      page.drawText(para, {
+        x: leftMargin,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      y -= 11;
+    });
+
+    y -= 10;
+
+    // Confirmation section
+    page.drawText('Die Auftraggeberin bestatigt mit ihrer Unterschrift, Folgendes erhalten zu haben:', {
+      x: leftMargin,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 11;
+
+    const checkItems = [
+      '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Beauftragten (Anhang 1)',
+      '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Mitbeauftragten',
+      '  Offenlegung der Entschadigung nach Art. 45b Versicherungsaufsichtsgesetz (VAG) (Anhang 2)',
+      '  Allgemeine Geschaftsbedingungen (AGB), Version Co-Broker (Anhang 3)'
+    ];
+
+    checkItems.forEach(item => {
+      page.drawText(item, {
+        x: leftMargin,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      y -= 11;
+    });
+
+    y -= 20;
+
+    // Signature section
+    const currentDate = new Date().toLocaleDateString('de-CH');
+
+    page.drawText(`Ort, Datum, ${userData.city}, ${currentDate}`, {
       x: col1X,
       y: y,
       size: 8,
@@ -639,7 +780,7 @@ private async createApplicationWithUserData(
       color: rgb(0, 0, 0)
     });
 
-    page.drawText(beauftragteLines[i], {
+    page.drawText(`Schoftland, ${currentDate}`, {
       x: col2X,
       y: y,
       size: 8,
@@ -647,268 +788,124 @@ private async createApplicationWithUserData(
       color: rgb(0, 0, 0)
     });
 
-    page.drawText(mitbeauftragteLines[i], {
+    page.drawText('Ort, Datum, _______________', {
       x: col3X,
       y: y,
       size: 8,
       font,
-      color: rgb(0.5, 0.5, 0.5)
+      color: rgb(0, 0, 0)
     });
 
-    y -= 12;
+    y -= 15;
+
+    page.drawText('Auftraggeberin', {
+      x: col1X,
+      y: y,
+      size: 8,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('Beauftragte', {
+      x: col2X,
+      y: y,
+      size: 8,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('Mitbeauftragte', {
+      x: col3X,
+      y: y,
+      size: 8,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 15;
+
+    page.drawText('________________________', {
+      x: col1X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('_________________________', {
+      x: col2X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('_______________________', {
+      x: col3X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 11;
+
+    page.drawText(`${userData.firstName} ${userData.lastName}`, {
+      x: col1X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('Howden Broker Service Schweiz AG', {
+      x: col2X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 15;
+
+    page.drawText('________________________', {
+      x: col1X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('_________________________', {
+      x: col2X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    page.drawText('_______________________', {
+      x: col3X,
+      y: y,
+      size: 9,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 11;
+
+    page.drawText('Howden Broker Service Schweiz AG', {
+      x: col2X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    console.log('✅ Application PDF created with full address (address + street)');
+    return pdfDoc;
   }
 
-  y -= 15;
-
-  // Main text - justified
-  const mainText = [
-    'Mit Wirkung zum Datum der Unterzeichnung beauftragt die Auftraggeberin die Beauftragte sowie die Mitbeauftragte mit',
-    'der Uberprufung, Gestaltung, Koordination, dem Abschluss und der Betreuung samtlicher Versicherungsvertrage. Dies',
-    'gilt auch fur die Tochtergesellschaften der Auftraggeberin. Sowohl die Beauftragte als auch die Mitbeauftragte sind',
-    'ermachtigt, dazu im Namen der Auftraggeberin aufzutreten.'
-  ];
-
-  mainText.forEach(line => {
-    page.drawText(line, {
-      x: leftMargin,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    y -= 11;
-  });
-
-  y -= 8;
-
-  page.drawText('Diese Vollmacht berechtigt sowohl die Beauftragte wie auch die Mitbeauftragte insbesondere,', {
-    x: leftMargin,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 11;
-
-  // Bullet points
-  const bullets = [
-    '  Versicherungsofferten einzuholen;',
-    '  Mit den Anbietenden zu verhandeln;',
-    '  Versicherungen nach Rucksprache mit der Auftraggeberin zu platzieren und zu kundigen und',
-    '  In Schadenfallen die Interessen der Auftraggeberin zu vertreten (einschliesslich Einsicht in das gesamte Dossier).'
-  ];
-
-  bullets.forEach(bullet => {
-    page.drawText(bullet, {
-      x: leftMargin,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    y -= 11;
-  });
-
-  y -= 8;
-
-  // Additional paragraphs
-  const additionalParas = [
-    'Die Vollmacht umfasst auch die Beschaffung und die Weitergabe erforderlicher Risikoinformationen aus bestehenden',
-    'und abgelaufenen Versicherungsvertragen.',
-    '',
-    'Der Auftrag ist gemass den Bestimmungen des schweizerischen Obligationenrechts jederzeit widerrufbar.'
-  ];
-
-  additionalParas.forEach(para => {
-    page.drawText(para, {
-      x: leftMargin,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    y -= 11;
-  });
-
-  y -= 10;
-
-  // Confirmation section
-  page.drawText('Die Auftraggeberin bestatigt mit ihrer Unterschrift, Folgendes erhalten zu haben:', {
-    x: leftMargin,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 11;
-
-  const checkItems = [
-    '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Beauftragten (Anhang 1)',
-    '  Informationen nach Art. 45 Versicherungsaufsichtsgesetz (VAG) von der Mitbeauftragten',
-    '  Offenlegung der Entschadigung nach Art. 45b Versicherungsaufsichtsgesetz (VAG) (Anhang 2)',
-    '  Allgemeine Geschaftsbedingungen (AGB), Version Co-Broker (Anhang 3)'
-  ];
-
-  checkItems.forEach(item => {
-    page.drawText(item, {
-      x: leftMargin,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    y -= 11;
-  });
-
-  y -= 20;
-
-  // Signature section
-  const currentDate = new Date().toLocaleDateString('de-CH');
-
-  // Dates row
-  page.drawText(`Ort, Datum, ${userData.city}, ${currentDate}`, {
-    x: col1X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText(`Schoftland, ${currentDate}`, {
-    x: col2X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('Ort, Datum, _______________', {
-    x: col3X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 15;
-
-  // Role labels
-  page.drawText('Auftraggeberin', {
-    x: col1X,
-    y: y,
-    size: 8,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('Beauftragte', {
-    x: col2X,
-    y: y,
-    size: 8,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('Mitbeauftragte', {
-    x: col3X,
-    y: y,
-    size: 8,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 15;
-
-  // First signature lines
-  page.drawText('________________________', {
-    x: col1X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('_________________________', {
-    x: col2X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('_______________________', {
-    x: col3X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 11;
-
-  // Names
-  page.drawText(`${userData.firstName} ${userData.lastName}`, {
-    x: col1X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('Howden Broker Service Schweiz AG', {
-    x: col2X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 15;
-
-  // Second signature lines
-  page.drawText('________________________', {
-    x: col1X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('_________________________', {
-    x: col2X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  page.drawText('_______________________', {
-    x: col3X,
-    y: y,
-    size: 9,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  y -= 11;
-
-  page.drawText('Howden Broker Service Schweiz AG', {
-    x: col2X,
-    y: y,
-    size: 8,
-    font,
-    color: rgb(0, 0, 0)
-  });
-
-  console.log('✅ Application PDF created with logo on right side');
-  return pdfDoc;
-}
-
-  /**
-   * Get German month name
-   */
   private getGermanMonth(monthIndex: number): string {
     const months = [
       'Januar', 'Februar', 'Marz', 'April', 'Mai', 'Juni',
@@ -917,9 +914,6 @@ private async createApplicationWithUserData(
     return months[monthIndex];
   }
 
-  /**
-   * Get insurer addresses
-   */
   private getInsurerAddress(insurerName: string): { street: string; postal: string; city: string } | null {
     const addresses: Record<string, { street: string; postal: string; city: string }> = {
       'CSS Versicherung AG': { street: 'Tribschenstrasse 21', postal: '6002', city: 'Luzern' },
@@ -937,30 +931,32 @@ private async createApplicationWithUserData(
       'Visana Services AG': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 15' },
       'Groupe Mutuel': { street: 'Rue des Cedres 5', postal: '1919', city: 'Martigny' },
       'Sympany': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
-      'Assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009',city: 'Pully' },
-'Assura-Basis AG': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' }
-};
-return addresses[insurerName] || null;
-}
-async validateTemplates(): Promise<{
-cancellationTemplate: boolean;
-applicationTemplate: boolean;
-errors: string[];
-}> {
-return {
-cancellationTemplate: true,
-applicationTemplate: true,
-errors: []
-};
-}
-static async initializeTemplates(): Promise<void> {
-const templatesDir = path.join(process.cwd(), 'public', 'documents');
-try {
-  await fs.access(templatesDir);
-  console.log('Documents directory exists:', templatesDir);
-} catch {
-  await fs.mkdir(templatesDir, { recursive: true });
-  console.log('Created documents directory:', templatesDir);
-}
-}
+      'Assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
+      'Assura-Basis AG': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' }
+    };
+    return addresses[insurerName] || null;
+  }
+
+  async validateTemplates(): Promise<{
+    cancellationTemplate: boolean;
+    applicationTemplate: boolean;
+    errors: string[];
+  }> {
+    return {
+      cancellationTemplate: true,
+      applicationTemplate: true,
+      errors: []
+    };
+  }
+
+  static async initializeTemplates(): Promise<void> {
+    const templatesDir = path.join(process.cwd(), 'public', 'documents');
+    try {
+      await fs.access(templatesDir);
+      console.log('Documents directory exists:', templatesDir);
+    } catch {
+      await fs.mkdir(templatesDir, { recursive: true });
+      console.log('Created documents directory:', templatesDir);
+    }
+  }
 }

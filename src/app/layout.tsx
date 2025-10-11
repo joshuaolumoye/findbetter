@@ -2,21 +2,58 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-// Using Inter instead of Geist to avoid the build error
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
 });
 
-// Using JetBrains_Mono instead of Geist_Mono for better compatibility
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "KVG Insurance Platform",
-  description: "Swiss health insurance comparison and switching platform",
+  title: "FindBetter – Trusted Swiss Healthcare & Insurance Platform",
+  description:
+    "FindBetter helps individuals and families in Switzerland compare, choose, and manage the best healthcare insurance plans. Get transparent comparisons, expert insights, and secure online switching to save on your health premiums.",
+  keywords: [
+    "Swiss health insurance",
+    "Switzerland healthcare",
+    "compare health insurance",
+    "Swiss medical insurance",
+    "KVG insurance platform",
+    "Swiss health plans",
+    "findbetter",
+    "affordable Swiss health insurance",
+  ],
+  icons: {
+    icon: "/findbetter_favicon.png",
+  },
+  openGraph: {
+    title: "FindBetter – Trusted Swiss Healthcare & Insurance Platform",
+    description:
+      "FindBetter simplifies Swiss healthcare insurance. Compare plans, manage policies, and make informed health coverage decisions with ease.",
+    url: "https://findbetter.ch",
+    siteName: "FindBetter",
+    images: [
+      {
+        url: "/findbetter_favicon.png",
+        width: 512,
+        height: 512,
+        alt: "FindBetter Logo",
+      },
+    ],
+    locale: "en_CH",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "FindBetter – Swiss Healthcare & Insurance Platform",
+    description:
+      "Compare, choose, and manage Swiss health insurance easily with FindBetter.",
+    images: ["/findbetter_favicon.png"],
+  },
+  metadataBase: new URL("https://findbetter.ch"),
 };
 
 export default function RootLayout({

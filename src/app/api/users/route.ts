@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
     // Validate Swiss postal code
     if (!/^\d{4}$/.test(body.postalCode)) {
       console.warn('Invalid postal code format:', body.postalCode);
-      // Don't fail registration for postal code, but log warning
     }
 
     // Extract city from address or use default
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
       return parts.length > 1 ? parts[parts.length - 1].trim() : '';
     };
 
-    // Prepare complete user data
+    // Prepare complete user data with street field
     const userData = {
       salutation: body.salutation,
       firstName: body.firstName.trim(),
@@ -85,6 +84,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone.trim(),
       birthDate: body.birthDate,
       address: body.address.trim(),
+      street: body.street?.trim() || null, // NEW: Street field
       postalCode: body.postalCode,
       city: extractCity(body.address) || body.city || '',
       canton: body.canton || null,

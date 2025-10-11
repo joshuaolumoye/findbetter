@@ -6,7 +6,7 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  console.log('=== DOCUMENT CREATION WITH SAVED USER DATA ===');
+  console.log('=== DOCUMENT CREATION WITH SAVED USER DATA + STREET ===');
   
   try {
     const skribbleConfig = getSkribbleConfig();
@@ -79,10 +79,12 @@ export async function POST(request: NextRequest) {
     console.log('✅ User data loaded:', {
       email: user.email,
       name: `${user.first_name} ${user.last_name}`,
+      address: user.address,
+      street: user.street || 'not provided',
       selectedInsurer: selectedQuote.selected_insurer
     });
 
-    // STEP 2: Prepare user data for document generation
+    // STEP 2: Prepare user data for document generation - NOW WITH STREET
     const userData = {
       userId: userId,
       salutation: user.salutation,
@@ -92,6 +94,7 @@ export async function POST(request: NextRequest) {
       phone: user.phone,
       birthDate: user.birth_date,
       address: user.address,
+      street: user.street || '', // NEW: Include street field
       postalCode: user.postal_code,
       city: user.city,
       canton: user.canton,
@@ -101,6 +104,13 @@ export async function POST(request: NextRequest) {
       currentInsurancePolicyNumber: user.current_insurance_policy_number,
       insuranceStartDate: user.insurance_start_date
     };
+
+    // Log the full address that will be used
+    const fullAddress = userData.street 
+      ? `${userData.address} ${userData.street}`.trim()
+      : userData.address;
+    
+    console.log('Full address for PDF:', fullAddress);
 
     const selectedInsurance = {
       insurer: selectedQuote.selected_insurer,
@@ -142,7 +152,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ Skribble authentication successful');
 
     // STEP 4: Process documents with detailed error tracking
-    console.log('STEP 3: Processing documents...');
+    console.log('STEP 3: Processing documents with full address (address + street)...');
     
     let result;
     try {
@@ -243,7 +253,7 @@ export async function POST(request: NextRequest) {
       recipientData: {
         name: `${userData.firstName} ${userData.lastName}`,
         email: userData.email,
-        address: userData.address,
+        address: fullAddress, // Use full address with street
         postalCode: userData.postalCode,
         city: userData.city,
         currentInsurer: userData.currentInsurer,
@@ -266,7 +276,7 @@ export async function POST(request: NextRequest) {
       sessionId: result.sessionId,
       expiresAt: result.expiresAt,
       documentPaths: result.documentPaths,
-      message: `Documents created successfully and will be sent to ${userData.email}`,
+      message: `Documents created successfully with full address and will be sent to ${userData.email}`,
       
       compliance: {
         legalFramework: 'CH-KVG',
@@ -274,7 +284,8 @@ export async function POST(request: NextRequest) {
         deliveryMethod: 'Email',
         retentionPeriod: '10 years',
         timezone: 'Europe/Zurich',
-        mode: result.mode || 'simplified'
+        mode: result.mode || 'simplified',
+        addressFormat: fullAddress // Include formatted address in response
       },
       
       documents: {
@@ -284,7 +295,8 @@ export async function POST(request: NextRequest) {
           type: 'cancellation',
           currentInsurer: userData.currentInsurer,
           effectiveDate: '31.12.2024',
-          status: 'generated'
+          status: 'generated',
+          address: fullAddress // Include in response
         },
         application: {
           id: result.applicationDocumentId,
@@ -293,7 +305,8 @@ export async function POST(request: NextRequest) {
           newInsurer: selectedInsurance.insurer,
           startDate: userData.insuranceStartDate,
           premium: `CHF ${selectedInsurance.premium.toFixed(2)}`,
-          status: 'generated'
+          status: 'generated',
+          address: fullAddress // Include in response
         }
       },
       
@@ -356,6 +369,7 @@ export async function POST(request: NextRequest) {
 async function triggerEmailDelivery(emailDeliveryData: any): Promise<void> {
   try {
     console.log('📧 Triggering email delivery for user:', emailDeliveryData.email);
+    console.log('Address on documents:', emailDeliveryData.recipientData.address);
     
     const deliveryResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/documents/deliver`, {
       method: 'POST',
