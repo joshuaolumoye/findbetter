@@ -611,7 +611,7 @@ const InsuranceSelectionPopup = ({
                   {/* Street/City Field - REQUIRED */}
                   <div className="w-full lg:w-1/2">
                     <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-1">
-                      Stadt*
+                      Strasse*
                     </label>
                     <input
                       type="text"
