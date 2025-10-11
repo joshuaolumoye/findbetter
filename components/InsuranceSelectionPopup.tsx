@@ -618,7 +618,7 @@ const InsuranceSelectionPopup = ({
                       id="street"
                       value={formData.street}
                       onChange={handleInputChange}
-                      placeholder="z.B. Zürich"
+                      placeholder="z.B. Musterstrasse 14"
                       className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
                         validationErrors.street ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
                       }`}
