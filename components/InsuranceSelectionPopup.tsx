@@ -55,7 +55,12 @@ const InsuranceSelectionPopup = ({
     }
     
     if (searchCriteria?.fullAddress) {
-      updates.address = searchCriteria.fullAddress;
+      // Filter out duplicate part: "6416 - Steinerberg - Steinerberg" -> "6416 - Steinerberg"
+      const addressParts = searchCriteria.fullAddress.split(' - ');
+      const cleanAddress = addressParts.length > 2 
+        ? `${addressParts[0]} - ${addressParts[1]}`
+        : searchCriteria.fullAddress;
+      updates.address = cleanAddress;
     }
     
     if (selectedInsurance?.insurerName || selectedInsurance?.Insurer) {
