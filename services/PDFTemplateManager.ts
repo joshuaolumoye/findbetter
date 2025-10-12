@@ -1,4 +1,4 @@
-// services/PDFTemplateManager.ts - WITH STREET FIELD CONCATENATION
+// services/PDFTemplateManager.ts - FIXED ADDRESS FORMAT
 import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
@@ -11,7 +11,7 @@ export interface UserFormData {
   phone: string;
   email: string;
   address: string;
-  street?: string; // NEW: Street field
+  street?: string;
   postalCode: string;
   city: string;
   nationality?: string;
@@ -41,16 +41,6 @@ export class PDFTemplateManager {
     this.templateBasePath = path.join(process.cwd(), 'public', 'documents');
     this.logoPath = path.join(process.cwd(), 'public', 'images', 'howden-logo.png');
     console.log('PDF Template Manager initialized with base path:', this.templateBasePath);
-  }
-
-  /**
-   * NEW HELPER: Format full address with street
-   */
-  private formatFullAddress(userData: UserFormData): string {
-    if (userData.street && userData.street.trim()) {
-      return `${userData.address} ${userData.street}`.trim();
-    }
-    return userData.address;
   }
 
   /**
@@ -85,7 +75,8 @@ export class PDFTemplateManager {
       email: userData.email,
       currentInsurer,
       insuranceStartDate: userData.insuranceStartDate,
-      fullAddress: this.formatFullAddress(userData)
+      street: userData.street,
+      address: userData.address
     });
 
     try {
@@ -117,7 +108,8 @@ export class PDFTemplateManager {
       name: `${userData.firstName} ${userData.lastName}`,
       insurer: selectedInsurance.insurer,
       premium: selectedInsurance.premium,
-      fullAddress: this.formatFullAddress(userData)
+      street: userData.street,
+      address: userData.address
     });
 
     try {
@@ -138,13 +130,14 @@ export class PDFTemplateManager {
   }
 
   /**
-   * Create cancellation PDF - exact match to template with STREET
+   * Create cancellation PDF - FIXED ADDRESS FORMAT
+   * Format: Name, Street, Postal Code + City (NO "CH-8001 - Zurich")
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
     currentInsurer: string
   ): Promise<PDFDocument> {
-    console.log('Creating cancellation PDF with full address (address + street)...');
+    console.log('Creating cancellation PDF with FIXED address format...');
     
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]); // A4
@@ -155,9 +148,6 @@ export class PDFTemplateManager {
     const lineHeight = 14;
     const leftMargin = 50;
     const rightColumnX = 320;
-
-    // Get full address with street
-    const fullAddress = this.formatFullAddress(userData);
 
     // Header instructions (light gray, smaller font)
     page.drawText('Tragen Sie Ihren Absender ein:', {
@@ -187,8 +177,10 @@ export class PDFTemplateManager {
 
     y -= 20;
 
-    // Left column - Policy number if available
+    // Left column - Sender information
     let leftY = y;
+    
+    // Policy number if available
     if (userData.currentInsurancePolicyNumber) {
       page.drawText('Versicherten Nummer', {
         x: leftMargin,
@@ -208,7 +200,7 @@ export class PDFTemplateManager {
       leftY -= lineHeight;
     }
 
-    // Sender name
+    // Name
     page.drawText('Name', {
       x: leftMargin,
       y: leftY,
@@ -243,24 +235,47 @@ export class PDFTemplateManager {
     });
     leftY -= lineHeight;
 
-    // UPDATED: Use full address (address + street)
-    page.drawText('Strasse, Nummer', {
-      x: leftMargin,
-      y: leftY,
-      size: 10,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    leftY -= lineHeight;
-    page.drawText(fullAddress, {
-      x: leftMargin,
-      y: leftY,
-      size: 10,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    leftY -= lineHeight;
+    // FIXED: Street field (if available)
+    if (userData.street && userData.street.trim()) {
+      page.drawText('Strasse, Nummer', {
+        x: leftMargin,
+        y: leftY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      leftY -= lineHeight;
+      page.drawText(userData.street, {
+        x: leftMargin,
+        y: leftY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      leftY -= lineHeight;
+    }
 
+    // FIXED: Address (just the street name/number if no separate street field)
+    if (!userData.street || !userData.street.trim()) {
+      page.drawText('Strasse, Nummer', {
+        x: leftMargin,
+        y: leftY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      leftY -= lineHeight;
+      page.drawText(userData.address, {
+        x: leftMargin,
+        y: leftY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      leftY -= lineHeight;
+    }
+
+    // FIXED: Postal code and city (NO "CH-" prefix)
     page.drawText('Postleitzahl, Wohnort', {
       x: leftMargin,
       y: leftY,
@@ -269,7 +284,7 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
     leftY -= lineHeight;
-    page.drawText(`${userData.postalCode}, ${userData.city}`, {
+    page.drawText(`${userData.postalCode} ${userData.city}`, {
       x: leftMargin,
       y: leftY,
       size: 10,
@@ -323,7 +338,7 @@ export class PDFTemplateManager {
         color: rgb(0, 0, 0)
       });
       rightY -= lineHeight;
-      page.drawText(`${insurerAddress.postal}, ${insurerAddress.city}`, {
+      page.drawText(`${insurerAddress.postal} ${insurerAddress.city}`, {
         x: rightColumnX,
         y: rightY,
         size: 10,
@@ -403,7 +418,7 @@ export class PDFTemplateManager {
     const startMonth = startDate.getMonth() + 1;
     const startYear = startDate.getFullYear();
 
-    // Main content - exact spacing from template
+    // Main content
     const line1 = `Hiermit kundige ich meine Grundversicherung per ${cancellationDay}. ${cancellationMonth} ${cancellationYear}. Ich werde ab ${startDay}.${startMonth}.${startYear} bei einem anderen`;
     const line2 = 'Krankenversicherer nach KVG versichert sein.';
 
@@ -493,18 +508,19 @@ export class PDFTemplateManager {
       color: rgb(0.4, 0.4, 0.4)
     });
 
-    console.log('✅ Cancellation PDF created with full address (address + street)');
+    console.log('✅ Cancellation PDF created with FIXED address format');
     return pdfDoc;
   }
 
   /**
-   * Create application PDF with logo and full address - exact match to template
+   * Create application PDF - FIXED ADDRESS FORMAT
+   * Format: Name, Street, Postal Code + City (NO "CH-8001 - Zurich")
    */
   private async createApplicationWithUserData(
     userData: UserFormData,
     selectedInsurance: SelectedInsurance
   ): Promise<PDFDocument> {
-    console.log('Creating application PDF with logo and full address (address + street)...');
+    console.log('Creating application PDF with FIXED address format...');
     
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
@@ -514,9 +530,6 @@ export class PDFTemplateManager {
     let y = 800;
     const lineHeight = 14;
     const leftMargin = 50;
-
-    // Get full address with street
-    const fullAddress = this.formatFullAddress(userData);
 
     // Try to embed logo on the RIGHT side
     const logo = await this.embedLogo(pdfDoc);
@@ -616,23 +629,23 @@ export class PDFTemplateManager {
 
     y -= 15;
 
-    // UPDATED: Column data with full address
+    // FIXED: Column 1 - User data (Name, Street, Postal Code + City)
     const clientLines = [
       `${userData.firstName} ${userData.lastName}`,
-      fullAddress, // NOW INCLUDES STREET
-      `CH-${userData.postalCode} ${userData.city}`
+      userData.street && userData.street.trim() ? userData.street : userData.address,
+      `${userData.postalCode} ${userData.city}` // NO "CH-" prefix
     ];
 
     const beauftragteLines = [
       'Howden Broker Service Schweiz AG',
       'Picardiestrasse 3A',
-      'CH-5040 Schoftland'
+      '5040 Schoftland' // NO "CH-" prefix
     ];
 
     const mitbeauftragteLines = [
       '',
       '',
-      'CH-'
+      ''
     ];
 
     for (let i = 0; i < 3; i++) {
@@ -665,7 +678,7 @@ export class PDFTemplateManager {
 
     y -= 15;
 
-    // Main text - justified
+    // Main text
     const mainText = [
       'Mit Wirkung zum Datum der Unterzeichnung beauftragt die Auftraggeberin die Beauftragte sowie die Mitbeauftragte mit',
       'der Uberprufung, Gestaltung, Koordination, dem Abschluss und der Betreuung samtlicher Versicherungsvertrage. Dies',
@@ -769,10 +782,11 @@ export class PDFTemplateManager {
 
     y -= 20;
 
-    // Signature section
+    // FIXED: Signature section with current date and address
     const currentDate = new Date().toLocaleDateString('de-CH');
 
-    page.drawText(`Ort, Datum, ${userData.city}, ${currentDate}`, {
+    // FIRST GREEN CIRCLE: Name, Street, Postal + City
+    page.drawText(`Ort, Datum: ${userData.city}, ${currentDate}`, {
       x: col1X,
       y: y,
       size: 8,
@@ -788,7 +802,7 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
 
-    page.drawText('Ort, Datum, _______________', {
+    page.drawText('Ort, Datum: _______________', {
       x: col3X,
       y: y,
       size: 8,
@@ -824,6 +838,7 @@ export class PDFTemplateManager {
 
     y -= 15;
 
+    // SECOND GREEN CIRCLE: Signature lines
     page.drawText('________________________', {
       x: col1X,
       y: y,
@@ -850,6 +865,7 @@ export class PDFTemplateManager {
 
     y -= 11;
 
+    // Name below signature line
     page.drawText(`${userData.firstName} ${userData.lastName}`, {
       x: col1X,
       y: y,
@@ -860,6 +876,30 @@ export class PDFTemplateManager {
 
     page.drawText('Howden Broker Service Schweiz AG', {
       x: col2X,
+      y: y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0)
+    });
+
+    y -= 11;
+
+    // Street below name
+    if (userData.street && userData.street.trim()) {
+      page.drawText(userData.street, {
+        x: col1X,
+        y: y,
+        size: 8,
+        font,
+        color: rgb(0, 0, 0)
+      });
+    }
+
+    y -= 11;
+
+    // Postal + City below street
+    page.drawText(`${userData.postalCode} ${userData.city}`, {
+      x: col1X,
       y: y,
       size: 8,
       font,
@@ -902,7 +942,7 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
 
-    console.log('✅ Application PDF created with full address (address + street)');
+    console.log('✅ Application PDF created with FIXED address format');
     return pdfDoc;
   }
 
