@@ -136,12 +136,12 @@ export default function Home() {
 
       <div className="container mx-auto px-6 py-12 sm:py-16 text-center">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
-          Kein Bock mehr, es dir machen zu lassen?
+          Keinen Bock mehr, es dir machen zu lassen? 
         </h1>
         <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
-          fang an es dir selber zu machen.
+          Mach‘s dir selbst!
         </h2>
-        <p className="max-w-xl mx-auto text-gray-600 mb-8 text-base">
+        {/* <p className="max-w-xl mx-auto text-gray-600 mb-8 text-base">
           Der widerwilligste und letzte Krankenkassenvergleich der Schweiz.
           Inklusive Kündigung in nur 4 Schritten.
         </p>
@@ -150,7 +150,7 @@ export default function Home() {
 
         <p className="text-xs text-gray-500 mt-3">
           4.9 Bewertungen auf Trustpilot
-        </p>
+        </p> */}
 
         <div className="mt-20 text-center">
           <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 leading-tight">

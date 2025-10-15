@@ -26,12 +26,12 @@ const Footer = () => {
               </a>
             </li>
             <li className="hover:underline cursor-pointer"></li>
-            <li className="hover:underline cursor-pointer">
+            {/* <li className="hover:underline cursor-pointer">
               <a target="_blank" rel="noopener noreferrer" href="/documents/Allgemeine_geschaftsbedingungen.pdf">
                 Allgemeine Geschäftsbedingungen
               </a>
             </li>
-            <li className="hover:underline cursor-pointer"></li>
+            <li className="hover:underline cursor-pointer"></li> */}
             <li className="hover:underline cursor-pointer">
               <a target="_blank" rel="noopener noreferrer" href="/documents/Muster_Brokermandat_DE_Vollmandat.pdf">
                 Auftrag und Vollmacht
