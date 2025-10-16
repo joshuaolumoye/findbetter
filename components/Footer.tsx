@@ -19,13 +19,13 @@ const Footer = () => {
         <div>
           <h3 className="text-lg font-bold mb-4">Richtlinien</h3>
           <ul className="space-y-2">
-            <li><Link href="/datenschutz" className="hover:underline">Datenschutzbestimmungen</Link></li>
+            {/* <li><Link href="/datenschutz" className="hover:underline">Datenschutzbestimmungen</Link></li>
             <li className="hover:underline cursor-pointer">
               <a target="_blank" rel="noopener noreferrer" href="/documents/Informationen_nach_Artikel.pdf">
                 Informationen nach Artikel 45
               </a>
             </li>
-            <li className="hover:underline cursor-pointer"></li>
+            <li className="hover:underline cursor-pointer"></li> */}
             {/* <li className="hover:underline cursor-pointer">
               <a target="_blank" rel="noopener noreferrer" href="/documents/Allgemeine_geschaftsbedingungen.pdf">
                 Allgemeine Geschäftsbedingungen

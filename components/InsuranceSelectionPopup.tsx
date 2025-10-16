@@ -116,8 +116,6 @@ const InsuranceSelectionPopup = ({
       
       if (birthDate > today) {
         errors.birthDate = 'Geburtsdatum kann nicht in der Zukunft liegen';
-      } else if (age < 18) {
-        errors.birthDate = 'Mindestalter 18 Jahre';
       } else if (age > 120) {
         errors.birthDate = 'Bitte geben Sie ein gültiges Geburtsdatum ein';
       }
@@ -790,16 +788,15 @@ const InsuranceSelectionPopup = ({
                       required
                     />
                     <a 
-                      href="/documents/Informationen_nach_Artikel.pdf" 
-                      target="_blank" 
+                      href="/datenschutz" 
                       rel="noopener noreferrer" 
                       className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
                     >
-                      Information nach Art. 45*
+                      Datenschutzerklärung*
                     </a>
                   </div>
 
-                  <div className="flex items-start">
+                  {/* <div className="flex items-start">
                     <input 
                       id="agbAccepted" 
                       type="checkbox" 
@@ -818,7 +815,7 @@ const InsuranceSelectionPopup = ({
                     >
                       AGB*
                     </a>
-                  </div>
+                  </div> */}
 
                   <div className="flex items-start">
                     <input 
@@ -858,7 +855,7 @@ const InsuranceSelectionPopup = ({
                       rel="noopener noreferrer" 
                       className="ml-3 text-sm text-blue-600 font-semibold hover:underline"
                     >
-                      Vollmacht zur Kündigung*
+                      Kündigungsformular*
                     </a>
                   </div>
 
