@@ -33,7 +33,7 @@ const InsuranceSelectionPopup = ({
     idDocumentFrontBase64: null,
     idDocumentBackBase64: null,
     informationArt45: false,
-    agbAccepted: false,
+    // agbAccepted: false,
     mandateAccepted: false,
     terminationAuthority: false,
     consultationInterest: false
@@ -54,14 +54,14 @@ const InsuranceSelectionPopup = ({
       updates.insuranceStartDate = '2026-01-01';
     }
     
-    if (searchCriteria?.fullAddress) {
-      // Filter out duplicate part: "6416 - Steinerberg - Steinerberg" -> "6416 - Steinerberg"
-      const addressParts = searchCriteria.fullAddress.split(' - ');
-      const cleanAddress = addressParts.length > 2 
-        ? `${addressParts[0]} - ${addressParts[1]}`
-        : searchCriteria.fullAddress;
-      updates.address = cleanAddress;
-    }
+    // if (searchCriteria?.fullAddress) {
+    //   // Filter out duplicate part: "6416 - Steinerberg - Steinerberg" -> "6416 - Steinerberg"
+    //   const addressParts = searchCriteria.fullAddress.split(' - ');
+    //   const cleanAddress = addressParts.length > 2 
+    //     ? `${addressParts[0]} - ${addressParts[1]}`
+    //     : searchCriteria.fullAddress;
+    //   updates.address = cleanAddress;
+    // }
     
     if (selectedInsurance?.insurerName || selectedInsurance?.Insurer) {
       updates.currentInsurer = selectedInsurance.insurerName || selectedInsurance.Insurer;
@@ -123,7 +123,7 @@ const InsuranceSelectionPopup = ({
 
     const requiredCheckboxes = [
       { key: 'informationArt45', label: 'Information nach Art. 45' },
-      { key: 'agbAccepted', label: 'AGB' },
+      // { key: 'agbAccepted', label: 'AGB' },
       { key: 'mandateAccepted', label: 'Auftrag und Vollmacht' },
       { key: 'terminationAuthority', label: 'Vollmacht zur Kündigung' }
     ];
@@ -224,7 +224,7 @@ const InsuranceSelectionPopup = ({
         
         compliance: {
           informationArt45: formData.informationArt45,
-          agbAccepted: formData.agbAccepted,
+          // agbAccepted: formData.agbAccepted,
           mandateAccepted: formData.mandateAccepted,
           terminationAuthority: formData.terminationAuthority,
           consultationInterest: formData.consultationInterest
@@ -360,7 +360,7 @@ const InsuranceSelectionPopup = ({
         idDocumentFrontBase64: null,
         idDocumentBackBase64: null,
         informationArt45: false,
-        agbAccepted: false,
+        // agbAccepted: false,
         mandateAccepted: false,
         terminationAuthority: false,
         consultationInterest: false
@@ -598,18 +598,16 @@ const InsuranceSelectionPopup = ({
                         value={formData.address}
                         onChange={handleInputChange}
                         placeholder="Straße Nr, PLZ Ort"
-                        disabled={!!searchCriteria?.fullAddress}
-                        readOnly={!!searchCriteria?.fullAddress}
                         className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
                           validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                        } ${searchCriteria?.fullAddress ? 'bg-gray-200 cursor-not-allowed' : ''}`}
+                        }`}
                         required
                       />
                       {validationErrors.address && (
                         <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
                       )}
                     </div>
-                  </div>
+
 
                   {/* Street/City Field - REQUIRED */}
                   <div className="w-full lg:w-1/2">
