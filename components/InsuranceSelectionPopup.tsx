@@ -589,24 +589,25 @@ const InsuranceSelectionPopup = ({
                     </div>
                     
                     <div className="w-full lg:w-1/2">
-                      <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                        PLZ und Ort*
-                      </label>
-                      <input
-                        type="text"
-                        id="address"
-                        value={formData.address}
-                        onChange={handleInputChange}
-                        placeholder="Straße Nr, PLZ Ort"
-                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                          validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
-                        }`}
-                        required
-                      />
-                      {validationErrors.address && (
-                        <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
-                      )}
-                    </div>
+                        <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                          PLZ und Ort*
+                        </label>
+                        <input
+                          type="text"
+                          id="address"
+                          value={formData.address}
+                          onChange={handleInputChange}
+                          placeholder="Straße Nr, PLZ Ort"
+                          className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                            validationErrors.address ? 'ring-2 ring-red-500 bg-red-50' : 'focus:ring-blue-500'
+                          }`}
+                          required
+                        />
+                        {validationErrors.address && (
+                          <p className="mt-1 text-sm text-red-600">{validationErrors.address}</p>
+                        )}
+                      </div>
+                    </div> {/* ✅ close this div properly before starting next field */}
 
 
                   {/* Street/City Field - REQUIRED */}
