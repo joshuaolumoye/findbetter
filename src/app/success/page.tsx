@@ -137,8 +137,8 @@ const SuccessPage: React.FC = () => {
         {/* Contact Info */}
         <p className="text-sm text-gray-500 mt-6">
           Bei Fragen kontaktieren Sie uns unter{" "}
-          <a href="mailto:support@example.com" className="text-blue-600 hover:text-blue-700 underline">
-            info@findmybetter.ch
+          <a href="mailto:info@findbetter.ch" className="text-blue-600 hover:text-blue-700 underline">
+            info@findbetter.ch
           </a>
         </p>
       </div>

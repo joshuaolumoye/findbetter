@@ -1,4 +1,4 @@
-// services/PDFTemplateManager.ts - UPDATED APPLICATION PDF WITH TEMPLATE LOADING
+// services/PDFTemplateManager.ts - FIXED WITH EQUAL LEFT AND RIGHT MARGINS
 import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
@@ -108,217 +108,244 @@ export class PDFTemplateManager {
   }
 
   /**
-   * Create cancellation PDF - FIXED ADDRESS FORMAT
-   * Format: Name, Street, Postal Code + City (NO "CH-8001 - Zurich")
-   * THIS METHOD REMAINS UNCHANGED
+   * Helper function to wrap text within a maximum width
+   */
+  private wrapText(text: string, maxWidth: number, fontSize: number, font: any): string[] {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    return lines;
+  }
+
+  /**
+   * Create cancellation PDF with proper equal left and right margins
+   * All text respects the right margin boundary
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
     currentInsurer: string
   ): Promise<PDFDocument> {
-    console.log('Creating cancellation PDF with FIXED address format...');
+    console.log('Creating cancellation PDF with equal left and right margins...');
     
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]); // A4
+    const page = pdfDoc.addPage([595, 842]); // A4 size
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    let y = 790;
-    const lineHeight = 14;
-    const leftMargin = 50;
-    const rightColumnX = 320;
-
-    // Header instructions (light gray, smaller font)
-    page.drawText('Tragen Sie Ihren Absender ein:', {
-      x: leftMargin,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0.5, 0.5, 0.5)
-    });
-
-    page.drawText('Tragen Sie die Adresse Ihrer', {
-      x: rightColumnX,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0.5, 0.5, 0.5)
-    });
-
-    y -= 10;
-    page.drawText('Krankenversicherung ein:', {
-      x: rightColumnX,
-      y: y,
-      size: 8,
-      font,
-      color: rgb(0.5, 0.5, 0.5)
-    });
-
-    y -= 20;
-
-    // Left column - Sender information
-    let leftY = y;
+    // ============= PAGE LAYOUT SETUP =============
+    const MARGIN_LEFT = 50;
+    const MARGIN_RIGHT = 50;
+    const PAGE_WIDTH = 595;
+    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT; // 495
+    const COLUMN_DIVIDE = 270; // Where right column starts (from left edge)
+    const LINE_HEIGHT = 14;
     
-    // Policy number if available
+    // Calculate available width for each column with proper right margin
+    const leftColumnWidth = COLUMN_DIVIDE - MARGIN_LEFT - 10; // 210 (with 10px gap)
+    const rightColumnWidth = PAGE_WIDTH - COLUMN_DIVIDE - MARGIN_RIGHT; // 275
+    
+    let currentY = 790;
+
+    // ============= HEADER INSTRUCTIONS =============
+    page.drawText('Tragen Sie Ihren Absender ein:', {
+      x: MARGIN_LEFT,
+      y: currentY,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5)
+    });
+
+    // Right column header - wrap if needed
+    const rightHeaderLines = this.wrapText(
+      'Tragen Sie die Adresse Ihrer Krankenversicherung ein:',
+      rightColumnWidth,
+      8,
+      font
+    );
+
+    for (let i = 0; i < rightHeaderLines.length; i++) {
+      page.drawText(rightHeaderLines[i], {
+        x: COLUMN_DIVIDE,
+        y: currentY - (i * 10),
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+    }
+
+    currentY -= 30;
+
+    // ============= LEFT COLUMN - SENDER INFO =============
+    let leftY = currentY;
+    
+    // Policy number (if available)
     if (userData.currentInsurancePolicyNumber) {
       page.drawText('Versicherten Nummer', {
-        x: leftMargin,
+        x: MARGIN_LEFT,
         y: leftY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      leftY -= lineHeight;
+      leftY -= LINE_HEIGHT;
       page.drawText(userData.currentInsurancePolicyNumber, {
-        x: leftMargin,
+        x: MARGIN_LEFT,
         y: leftY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      leftY -= lineHeight;
+      leftY -= LINE_HEIGHT;
     }
 
-    // Name
+    // Last name
     page.drawText('Name', {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    leftY -= lineHeight;
+    leftY -= LINE_HEIGHT;
     page.drawText(userData.lastName, {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    leftY -= lineHeight;
+    leftY -= LINE_HEIGHT;
 
+    // First name
     page.drawText('Vorname', {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    leftY -= lineHeight;
+    leftY -= LINE_HEIGHT;
     page.drawText(userData.firstName, {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    leftY -= lineHeight;
+    leftY -= LINE_HEIGHT;
 
-    // Street field (if available)
-    if (userData.street && userData.street.trim()) {
-      page.drawText('Strasse, Nummer', {
-        x: leftMargin,
-        y: leftY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      leftY -= lineHeight;
-      page.drawText(userData.street, {
-        x: leftMargin,
-        y: leftY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      leftY -= lineHeight;
-    }
+    // Street
+    const streetToUse = userData.street && userData.street.trim() 
+      ? userData.street 
+      : userData.address;
+      
+    page.drawText('Strasse, Nummer', {
+      x: MARGIN_LEFT,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= LINE_HEIGHT;
+    page.drawText(streetToUse, {
+      x: MARGIN_LEFT,
+      y: leftY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    leftY -= LINE_HEIGHT;
 
-    // Address (just the street name/number if no separate street field)
-    if (!userData.street || !userData.street.trim()) {
-      page.drawText('Strasse, Nummer', {
-        x: leftMargin,
-        y: leftY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      leftY -= lineHeight;
-      page.drawText(userData.address, {
-        x: leftMargin,
-        y: leftY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      leftY -= lineHeight;
-    }
-
-    // Postal code and city (NO "CH-" prefix)
+    // Postal code and city
     page.drawText('Postleitzahl, Wohnort', {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    leftY -= lineHeight;
+    leftY -= LINE_HEIGHT;
     page.drawText(`${userData.postalCode} ${userData.city}`, {
-      x: leftMargin,
+      x: MARGIN_LEFT,
       y: leftY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
-    // Right column - Insurance company
-    let rightY = y;
+    // ============= RIGHT COLUMN - INSURANCE COMPANY INFO =============
+    let rightY = currentY;
+    
     page.drawText('Name der Krankenversicherung', {
-      x: rightColumnX,
+      x: COLUMN_DIVIDE,
       y: rightY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    rightY -= lineHeight;
-    page.drawText(currentInsurer, {
-      x: rightColumnX,
-      y: rightY,
-      size: 10,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    rightY -= lineHeight;
+    rightY -= LINE_HEIGHT;
+    
+    // Wrap insurer name if too long
+    const insurerNameLines = this.wrapText(currentInsurer, rightColumnWidth, 10, font);
+    for (const line of insurerNameLines) {
+      page.drawText(line, {
+        x: COLUMN_DIVIDE,
+        y: rightY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      rightY -= LINE_HEIGHT;
+    }
 
     const insurerAddress = this.getInsurerAddress(currentInsurer);
     if (insurerAddress) {
       page.drawText('Strasse, Nummer', {
-        x: rightColumnX,
+        x: COLUMN_DIVIDE,
         y: rightY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      rightY -= lineHeight;
+      rightY -= LINE_HEIGHT;
+      
       page.drawText(insurerAddress.street, {
-        x: rightColumnX,
+        x: COLUMN_DIVIDE,
         y: rightY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      rightY -= lineHeight;
+      rightY -= LINE_HEIGHT;
 
       page.drawText('Postleitzahl, Ort', {
-        x: rightColumnX,
+        x: COLUMN_DIVIDE,
         y: rightY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      rightY -= lineHeight;
+      rightY -= LINE_HEIGHT;
+      
       page.drawText(`${insurerAddress.postal} ${insurerAddress.city}`, {
-        x: rightColumnX,
+        x: COLUMN_DIVIDE,
         y: rightY,
         size: 10,
         font,
@@ -326,168 +353,184 @@ export class PDFTemplateManager {
       });
     }
 
-    // Move to next section
-    y = Math.min(leftY, rightY) - 30;
+    // ============= MAIN CONTENT SECTION =============
+    currentY = Math.min(leftY, rightY) - 30;
 
     // Date and location
     const today = new Date();
     const dateStr = today.toLocaleDateString('de-CH');
     
     page.drawText('Ort, Datum', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
-    y -= lineHeight;
+    currentY -= LINE_HEIGHT;
     page.drawText(`${userData.city}, ${dateStr}`, {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= 30;
+    currentY -= 30;
 
-    // Title - Bold and larger
-    page.drawText('Kundigung der obligatorischen Krankenpflegeversicherung', {
-      x: leftMargin,
-      y: y,
+    // Title - wrap if needed
+    const titleLine1 = 'Kundigung der obligatorischen Krankenpflegeversicherung';
+    page.drawText(titleLine1, {
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 12,
       font: boldFont,
       color: rgb(0, 0, 0)
     });
 
-    y -= 16;
+    currentY -= 16;
     page.drawText('(Grundversicherung)', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 12,
       font: boldFont,
       color: rgb(0, 0, 0)
     });
 
-    y -= 25;
+    currentY -= 25;
 
     // Greeting
     page.drawText('Sehr geehrte Damen und Herren', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 11,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= 20;
+    currentY -= 20;
 
-    // Calculate dates from insuranceStartDate
+    // Calculate cancellation dates
     const insuranceStartDate = userData.insuranceStartDate || '2026-01-01';
     const startDate = new Date(insuranceStartDate);
-    
     const cancellationDate = new Date(startDate);
     cancellationDate.setDate(cancellationDate.getDate() - 1);
     
     const cancellationDay = cancellationDate.getDate();
     const cancellationMonth = this.getGermanMonth(cancellationDate.getMonth());
     const cancellationYear = cancellationDate.getFullYear();
-    
     const startDay = startDate.getDate();
     const startMonth = startDate.getMonth() + 1;
     const startYear = startDate.getFullYear();
 
-    // Main content
-    const line1 = `Hiermit kundige ich meine Grundversicherung per ${cancellationDay}. ${cancellationMonth} ${cancellationYear}. Ich werde ab ${startDay}.${startMonth}.${startYear} bei einem anderen`;
-    const line2 = 'Krankenversicherer nach KVG versichert sein.';
+    // Cancellation text - wrap properly to respect right margin
+    const cancellationText = `Hiermit kundige ich meine Grundversicherung per ${cancellationDay}. ${cancellationMonth} ${cancellationYear}. Ich werde ab ${startDay}.${startMonth}.${startYear} bei einem anderen Krankenversicherer nach KVG versichert sein.`;
+    
+    const cancellationLines = this.wrapText(cancellationText, CONTENT_WIDTH, 11, font);
+    
+    for (const line of cancellationLines) {
+      page.drawText(line, {
+        x: MARGIN_LEFT,
+        y: currentY,
+        size: 11,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      currentY -= 14;
+    }
 
-    page.drawText(line1, {
-      x: leftMargin,
-      y: y,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0)
-    });
-    y -= 14;
-    page.drawText(line2, {
-      x: leftMargin,
-      y: y,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0)
-    });
+    currentY -= 6;
 
-    y -= 20;
+    // Closing text - wrap properly to respect right margin
+    const closingText = 'Besten Dank fur die Ausfuhrung des Auftrages. Bitte stellen Sie mir eine entsprechende schriftliche Bestatigung zu.';
+    const closingLines = this.wrapText(closingText, CONTENT_WIDTH, 11, font);
+    
+    for (const line of closingLines) {
+      page.drawText(line, {
+        x: MARGIN_LEFT,
+        y: currentY,
+        size: 11,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      currentY -= 14;
+    }
 
-    // Closing
-    page.drawText('Besten Dank fur die Ausfuhrung des Auftrages. Bitte stellen Sie mir eine entsprechende schriftliche Bestatigung zu.', {
-      x: leftMargin,
-      y: y,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0),
-      maxWidth: 495
-    });
-
-    y -= 25;
+    currentY -= 11;
 
     page.drawText('Freundliche Grusse', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 11,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= 35;
+    currentY -= 50;
 
-    // Signature section - two columns
+    // ============= SIGNATURE SECTION =============
     page.drawText('Name, Vorname', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
     page.drawText('Unterschrift', {
-      x: rightColumnX,
-      y: y,
+      x: COLUMN_DIVIDE,
+      y: currentY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= lineHeight;
+    currentY -= LINE_HEIGHT;
     page.drawText(`${userData.lastName}, ${userData.firstName}`, {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 10,
       font,
       color: rgb(0, 0, 0)
     });
 
-    y -= 40;
+    currentY -= 45;
 
-    // Remark
+    // ============= REMARK =============
     page.drawText('Bemerkung:', {
-      x: leftMargin,
-      y: y,
+      x: MARGIN_LEFT,
+      y: currentY,
       size: 9,
       font: boldFont,
       color: rgb(0, 0, 0)
     });
 
-    y -= 12;
-    page.drawText('Es wird empfohlen, diesen Brief per Einschreiben zu versenden', {
-      x: leftMargin,
-      y: y,
-      size: 9,
-      font,
-      color: rgb(0.4, 0.4, 0.4)
-    });
+    currentY -= 12;
+    
+    // Wrap remark text to respect right margin
+    const remarkText = 'Es wird empfohlen, diesen Brief per Einschreiben zu versenden';
+    const remarkLines = this.wrapText(remarkText, CONTENT_WIDTH, 9, font);
+    
+    for (const line of remarkLines) {
+      page.drawText(line, {
+        x: MARGIN_LEFT,
+        y: currentY,
+        size: 9,
+        font,
+        color: rgb(0.4, 0.4, 0.4)
+      });
+      currentY -= 11;
+    }
 
-    console.log('✅ Cancellation PDF created with FIXED address format');
+    console.log('✅ Cancellation PDF created with proper equal margins:', {
+      leftMargin: MARGIN_LEFT,
+      rightMargin: MARGIN_RIGHT,
+      contentWidth: CONTENT_WIDTH,
+      leftColumnWidth,
+      rightColumnWidth,
+      pageWidth: PAGE_WIDTH
+    });
+    
     return pdfDoc;
   }
 
@@ -564,7 +607,7 @@ export class PDFTemplateManager {
       
       // Line 1: City and Date on the line below first "Ort, Datum"
       const ortDatumY = 274; // Y position on the line below "Ort, Datum"
-      firstPage.drawText(`${userData.city}, ${currentDate}`, {
+      firstPage.drawText(`${userData.address}, ${currentDate}`, {
         x: bottomLeftMargin,
         y: ortDatumY,
         size: 10,
