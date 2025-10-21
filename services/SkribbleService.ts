@@ -1,4 +1,4 @@
-// services/SkribbleService.ts - UPDATED to use working v2/signature-requests endpoint
+// services/SkribbleService.ts - UPDATED with No-Account Signer (NAS) support
 import { PDFTemplateManager } from './PDFTemplateManager';
 
 interface SkribbleConfig {
@@ -22,7 +22,7 @@ export class SkribbleService {
     };
     this.pdfManager = new PDFTemplateManager();
     
-    console.log('Initializing Skribble service for signature requests:', {
+    console.log('Initializing Skribble service with NAS support:', {
       environment: this.config.environment,
       baseUrl: this.config.baseUrl,
       hasApiKey: !!this.config.apiKey,
@@ -92,11 +92,11 @@ export class SkribbleService {
   }
 
   /**
-   * UPDATED: Process Swiss insurance switch using the working v2/signature-requests endpoint
+   * Process Swiss insurance switch using No-Account Signer (NAS)
    */
   async processSwissInsuranceSwitch(userData: any, selectedInsurance: any): Promise<any> {
     try {
-      console.log('Starting Swiss KVG insurance process with Skribble signature requests...');
+      console.log('Starting Swiss KVG insurance process with NAS support...');
       
       // Validate Swiss requirements
       this.validateSwissRequirements(userData, selectedInsurance);
@@ -111,9 +111,9 @@ export class SkribbleService {
         this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance)
       ]);
 
-      console.log('PDFs generated successfully, creating Skribble signature requests...');
+      console.log('PDFs generated successfully, creating Skribble signature requests with NAS...');
 
-      // Create BOTH signature requests using the working endpoint
+      // Create BOTH signature requests with No-Account Signer support
       const signatureRequests = await this.createBothSignatureRequests({
         cancellationPdf,
         applicationPdf,
@@ -122,7 +122,7 @@ export class SkribbleService {
         accessToken
       });
 
-      console.log('Both Skribble signature requests created successfully');
+      console.log('Both Skribble NAS signature requests created successfully');
 
       // Generate session ID
       const sessionId = `session_${Date.now()}`;
@@ -132,7 +132,9 @@ export class SkribbleService {
         success: true,
         sessionId: sessionId,
         cancellationDocumentId: signatureRequests.cancellation.requestId,
+        cancellationSigningUrl: signatureRequests.cancellation.signingUrl,
         applicationDocumentId: signatureRequests.application.requestId,
+        applicationSigningUrl: signatureRequests.application.signingUrl,
         currentInsurer: userData.currentInsurer,
         selectedInsurer: selectedInsurance.insurer,
         userEmail: userData.email,
@@ -140,13 +142,13 @@ export class SkribbleService {
       };
 
     } catch (error) {
-      console.error('Error processing Swiss insurance switch with Skribble:', error);
+      console.error('Error processing Swiss insurance switch with Skribble NAS:', error);
       throw new Error(`Failed to process KVG insurance switch: ${error.message}`);
     }
   }
 
   /**
-   * NEW: Create both signature requests using the working v2/signature-requests endpoint
+   * Create both signature requests with No-Account Signer (NAS) support
    */
   private async createBothSignatureRequests(params: {
     cancellationPdf: Buffer;
@@ -159,15 +161,15 @@ export class SkribbleService {
     application: { requestId: string; signingUrl: string };
   }> {
     
-    console.log('Creating both signature requests using v2/signature-requests endpoint...');
+    console.log('Creating both signature requests with NAS enabled...');
 
     try {
       // Convert PDFs to base64
       const cancellationBase64 = params.cancellationPdf.toString('base64');
       const applicationBase64 = params.applicationPdf.toString('base64');
 
-      // Create cancellation signature request
-      const cancellationRequest = await this.createSignatureRequestV2({
+      // Create cancellation signature request with NAS
+      const cancellationRequest = await this.createSignatureRequestV2WithNAS({
         title: `KVG Kündigung ${new Date().getFullYear()} - ${params.userData.firstName} ${params.userData.lastName}`,
         message: 'Bitte unterschreiben Sie diese wichtige KVG-Kündigung.',
         content: cancellationBase64,
@@ -179,8 +181,8 @@ export class SkribbleService {
         accessToken: params.accessToken
       });
 
-      // Create application signature request
-      const applicationRequest = await this.createSignatureRequestV2({
+      // Create application signature request with NAS
+      const applicationRequest = await this.createSignatureRequestV2WithNAS({
         title: `Krankenversicherungsantrag ${params.selectedInsurance.insurer} - ${params.userData.firstName} ${params.userData.lastName}`,
         message: 'Bitte unterschreiben Sie diesen Krankenversicherungsantrag.',
         content: applicationBase64,
@@ -198,15 +200,22 @@ export class SkribbleService {
       };
 
     } catch (error) {
-      console.error('Error creating signature requests:', error);
+      console.error('Error creating NAS signature requests:', error);
       throw new Error(`Failed to create signature requests: ${error.message}`);
     }
   }
 
   /**
-   * NEW: Create signature request using the working v2/signature-requests endpoint
+   * NEW: Create signature request with No-Account Signer (NAS) support
+   * This allows users to sign without creating a Skribble account
+   * 
+   * Implementation follows official Skribble documentation:
+   * - Combines account_email + signer_identity_data (recommended approach)
+   * - Checks for existing Skribble accounts first
+   * - Falls back to NAS if no account exists
+   * - Returns signature-specific signing_url for NAS users
    */
-  private async createSignatureRequestV2(params: {
+  private async createSignatureRequestV2WithNAS(params: {
     title: string;
     message: string;
     content: string; // base64 PDF content
@@ -218,26 +227,45 @@ export class SkribbleService {
     accessToken: string;
   }): Promise<{ requestId: string; signingUrl: string }> {
     
-    console.log(`Creating Skribble signature request: ${params.title}`);
+    console.log(`Creating Skribble NAS signature request: ${params.title}`);
 
     try {
       const signatureUrl = `${this.config.baseUrl}/v2/signature-requests`;
 
+      // RECOMMENDED APPROACH: Combine account_email + signer_identity_data
+      // Benefits:
+      // - If account exists: Document appears in user's Skribble account
+      // - If no account: User can sign without creating one
+      // - Best of both worlds!
       const requestPayload = {
         title: params.title,
         message: params.message,
         content: params.content, // base64 PDF content
         signatures: [
           {
-            account_email: params.signer.email
+            // Check for existing Skribble account first
+            account_email: params.signer.email,
+            
+            // Enable No-Account Signer functionality
+            signer_identity_data: {
+              email_address: params.signer.email,
+              first_name: params.signer.firstName,
+              last_name: params.signer.lastName,
+              language: 'de' // German for Swiss users (en, de, fr supported)
+              // Optional fields:
+              // mobile_number: params.signer.phone,
+              // provider: 'identity_provider_name'
+            }
           }
         ]
       };
 
-      console.log('Sending signature request to Skribble:', { 
+      console.log('Sending NAS signature request to Skribble:', { 
         url: signatureUrl, 
         title: params.title,
         signerEmail: params.signer.email,
+        nasEnabled: true,
+        language: 'de',
         contentSize: params.content.length
       });
 
@@ -252,18 +280,18 @@ export class SkribbleService {
         body: JSON.stringify(requestPayload)
       });
 
-      console.log('Signature request response status:', response.status);
+      console.log('NAS signature request response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Signature request error response:', errorText);
+        console.error('NAS signature request error response:', errorText);
         
         if (response.status === 401) {
           throw new Error('Skribble authentication failed - check API credentials');
         } else if (response.status === 413) {
           throw new Error('PDF file too large for Skribble (max 25MB)');
         } else if (response.status === 422) {
-          throw new Error('Invalid PDF format or corrupted file');
+          throw new Error('Invalid PDF format, corrupted file, or missing signer_identity_data');
         } else if (response.status === 500) {
           throw new Error('Skribble server error - please try again in a few minutes');
         }
@@ -278,19 +306,31 @@ export class SkribbleService {
         throw new Error('No request ID returned from Skribble');
       }
 
-      // ✅ Instead of redirecting to Skribble signing URL, go to success page
-      console.log(`✅ Signature request created: ${result.id}`);
+      // CRITICAL: Extract the correct signing URL for NAS users
+      // Use signing_url from signatures[0], NOT the top-level signing_url
+      // Top-level signing_url is for regular Skribble accounts only
+      // Signature-specific URL works for users without accounts
+      const nasSigningUrl = result.signatures?.[0]?.signing_url || '';
+
+      console.log(`✅ NAS signature request created: ${result.id}`);
+      console.log(`   Signer can sign without creating a Skribble account`);
+      console.log(`   NAS signing URL: ${nasSigningUrl}`);
+      console.log(`   Language: German (de)`);
+
+      // Optional: Add language parameter to URL if needed
+      // const signingUrlWithLang = `${nasSigningUrl}?lang=de`;
 
       return {
         requestId: result.id,
-        signingUrl: '' // empty since we're redirecting to success page instead
+        signingUrl: nasSigningUrl // Use the signature-specific URL for NAS users
       };
 
     } catch (error) {
-      console.error('Error creating signature request:', error);
+      console.error('Error creating NAS signature request:', error);
       throw new Error(`Failed to create signature request: ${error.message}`);
     }
   }
+
   /**
    * Validate Swiss requirements
    */
@@ -348,9 +388,6 @@ export class SkribbleService {
   async handleWebhook(payload: any, signature: string): Promise<any> {
     console.log('Processing Skribble webhook:', payload);
     
-    // Verify webhook signature if needed
-    // const isValid = this.verifyWebhookSignature(payload, signature);
-    
     return { 
       processed: true, 
       action: payload.event_type || 'unknown',
@@ -379,11 +416,13 @@ export const getSkribbleConfig = () => {
     throw new Error('SKRIBBLE_USERNAME environment variable is required');
   }
 
-  console.log('Skribble configuration for signature requests:', {
+  console.log('Skribble configuration with NAS support:', {
     environment: config.environment,
     baseUrl: config.baseUrl,
     hasApiKey: !!config.apiKey,
-    hasUsername: !!config.username
+    hasUsername: !!config.username,
+    nasEnabled: true,
+    language: 'de'
   });
 
   return config;
