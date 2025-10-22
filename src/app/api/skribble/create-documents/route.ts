@@ -262,9 +262,9 @@ export async function POST(request: NextRequest) {
     };
 
     // STEP 6: Trigger email delivery in background (non-blocking)
-    triggerEmailDelivery(emailDeliveryData).catch(emailError => {
-      console.error('⚠️ Email delivery failed (non-blocking):', emailError);
-    });
+    // triggerEmailDelivery(emailDeliveryData).catch(emailError => {
+    //   console.error('⚠️ Email delivery failed (non-blocking):', emailError);
+    // });
 
     // STEP 7: Return success response
     return NextResponse.json({

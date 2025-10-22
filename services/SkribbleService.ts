@@ -231,7 +231,7 @@ export class SkribbleService {
             signer_identity_data: {
               email_address: params.signerEmail
             },
-            signature_standard: "ses",
+            // signature_standard: "ses",
             visual_signature: {
               type: "picture-and-text",
               position: {
@@ -243,7 +243,9 @@ export class SkribbleService {
               }
             }
           }
-        ]
+        ],
+        quality: "SES",
+        legislation: "ZERTES"
       };
       
       // OPTION 2: WITHOUT VISUAL SIGNATURE (cleaner, simpler)
@@ -258,11 +260,13 @@ export class SkribbleService {
             signer_identity_data: {
               email_address: params.signerEmail
             },
-            signature_standard: "ses"
+           
             // No visual_signature field = no visible signature on PDF
             // Document is still legally signed!
           }
-        ]
+        ],
+        quality: "SES",
+        legislation: "ZERTES"
       };
       
       // Choose which payload to use
