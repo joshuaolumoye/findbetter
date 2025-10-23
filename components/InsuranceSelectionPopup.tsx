@@ -703,7 +703,10 @@ const InsuranceSelectionPopup = ({
                   </div>{" "}
                   {/* ✅ close this div properly before starting next field */}
                   {/* Street/City Field - REQUIRED */}
-                  <div className="w-full lg:w-1/2">
+                  
+                  {/* Current Insurer & Policy Number */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
                     <label
                       htmlFor="street"
                       className="block text-sm font-medium text-gray-700 mb-1"
@@ -729,60 +732,6 @@ const InsuranceSelectionPopup = ({
                       </p>
                     )}
                   </div>
-                  {/* Current Insurer & Policy Number */}
-                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-                    {/* <div className="w-full lg:w-1/2">
-                      <label
-                        htmlFor="currentInsurer"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Aktuelle Krankenversicherung*
-                      </label>
-                      <select
-                        id="currentInsurer"
-                        name="currentInsurer"
-                        value={formData.currentInsurer || ""}
-                        onChange={handleInputChange}
-                        disabled={
-                          !!(
-                            selectedInsurance?.insurerName ||
-                            selectedInsurance?.Insurer ||
-                            selectedInsurance?.Versicherer
-                          )
-                        }
-                        readOnly={
-                          !!(
-                            selectedInsurance?.insurerName ||
-                            selectedInsurance?.Insurer ||
-                            selectedInsurance?.Versicherer
-                          )
-                        }
-                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                          validationErrors.currentInsurer
-                            ? "ring-2 ring-red-500 bg-red-50"
-                            : "focus:ring-blue-500"
-                        } ${
-                          selectedInsurance?.insurerName ||
-                          selectedInsurance?.Insurer ||
-                          selectedInsurance?.Versicherer
-                            ? "bg-gray-200 cursor-not-allowed"
-                            : ""
-                        }`}
-                        required
-                      >
-                        <option value="">Bitte wählen...</option>
-                        {swissInsuranceCompanies.map((company: string) => (
-                          <option key={company} value={company}>
-                            {company}
-                          </option>
-                        ))}
-                      </select>
-                      {validationErrors.currentInsurer && (
-                        <p className="mt-1 text-sm text-red-600">
-                          {validationErrors.currentInsurer}
-                        </p>
-                      )}
-                    </div> */}
 
                     <div className="w-full lg:w-1/2">
                       <label
