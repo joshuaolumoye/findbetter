@@ -354,7 +354,7 @@ export class PDFTemplateManager {
     }
 
     // ============= MAIN CONTENT SECTION =============
-    currentY = Math.min(leftY, rightY) - 30;
+    currentY = Math.min(leftY, rightY) - 40;
 
     // Date and location
     const today = new Date();

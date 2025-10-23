@@ -731,7 +731,7 @@ const InsuranceSelectionPopup = ({
                   </div>
                   {/* Current Insurer & Policy Number */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-                    <div className="w-full lg:w-1/2">
+                    {/* <div className="w-full lg:w-1/2">
                       <label
                         htmlFor="currentInsurer"
                         className="block text-sm font-medium text-gray-700 mb-1"
@@ -782,7 +782,7 @@ const InsuranceSelectionPopup = ({
                           {validationErrors.currentInsurer}
                         </p>
                       )}
-                    </div>
+                    </div> */}
 
                     <div className="w-full lg:w-1/2">
                       <label
