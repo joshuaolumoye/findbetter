@@ -1,4 +1,4 @@
-// services/PDFTemplateManager.ts - FIXED WITH EQUAL LEFT AND RIGHT MARGINS
+// services/PDFTemplateManager.ts - COMPLETE SWISS INSURANCE ADDRESS DATABASE
 import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
@@ -136,7 +136,7 @@ export class PDFTemplateManager {
 
   /**
    * Create cancellation PDF with proper equal left and right margins
-   * All text respects the right margin boundary
+   * Right column displays insurance company name, street, and address
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
@@ -293,6 +293,7 @@ export class PDFTemplateManager {
     // ============= RIGHT COLUMN - INSURANCE COMPANY INFO =============
     let rightY = currentY;
     
+    // Insurance company name
     page.drawText('Name der Krankenversicherung', {
       x: COLUMN_DIVIDE,
       y: rightY,
@@ -315,43 +316,58 @@ export class PDFTemplateManager {
       rightY -= LINE_HEIGHT;
     }
 
+    // Get insurer address from comprehensive database
     const insurerAddress = this.getInsurerAddress(currentInsurer);
-    if (insurerAddress) {
-      page.drawText('Strasse, Nummer', {
-        x: COLUMN_DIVIDE,
-        y: rightY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      rightY -= LINE_HEIGHT;
-      
-      page.drawText(insurerAddress.street, {
-        x: COLUMN_DIVIDE,
-        y: rightY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      rightY -= LINE_HEIGHT;
+    
+    console.log('Insurance address lookup:', {
+      insurer: currentInsurer,
+      found: !!insurerAddress,
+      address: insurerAddress
+    });
 
-      page.drawText('Postleitzahl, Ort', {
-        x: COLUMN_DIVIDE,
-        y: rightY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-      rightY -= LINE_HEIGHT;
-      
-      page.drawText(`${insurerAddress.postal} ${insurerAddress.city}`, {
-        x: COLUMN_DIVIDE,
-        y: rightY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0)
-      });
-    }
+    // Always display street field
+    page.drawText('Strasse, Nummer', {
+      x: COLUMN_DIVIDE,
+      y: rightY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    rightY -= LINE_HEIGHT;
+    
+    // Display street or placeholder
+    const streetText = insurerAddress?.street || '[Strasse eintragen]';
+    page.drawText(streetText, {
+      x: COLUMN_DIVIDE,
+      y: rightY,
+      size: 10,
+      font,
+      color: insurerAddress ? rgb(0, 0, 0) : rgb(0.5, 0.5, 0.5)
+    });
+    rightY -= LINE_HEIGHT;
+
+    // Always display postal code and city field
+    page.drawText('Postleitzahl, Ort', {
+      x: COLUMN_DIVIDE,
+      y: rightY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0)
+    });
+    rightY -= LINE_HEIGHT;
+    
+    // Display postal code and city or placeholder
+    const postalText = insurerAddress 
+      ? `${insurerAddress.postal} ${insurerAddress.city}` 
+      : '[PLZ, Ort eintragen]';
+    
+    page.drawText(postalText, {
+      x: COLUMN_DIVIDE,
+      y: rightY,
+      size: 10,
+      font,
+      color: insurerAddress ? rgb(0, 0, 0) : rgb(0.5, 0.5, 0.5)
+    });
 
     // ============= MAIN CONTENT SECTION =============
     currentY = Math.min(leftY, rightY) - 40;
@@ -522,13 +538,14 @@ export class PDFTemplateManager {
       currentY -= 11;
     }
 
-    console.log('✅ Cancellation PDF created with proper equal margins:', {
+    console.log('✅ Cancellation PDF created with proper equal margins and right column address:', {
       leftMargin: MARGIN_LEFT,
       rightMargin: MARGIN_RIGHT,
       contentWidth: CONTENT_WIDTH,
       leftColumnWidth,
       rightColumnWidth,
-      pageWidth: PAGE_WIDTH
+      pageWidth: PAGE_WIDTH,
+      insurerAddressFound: !!insurerAddress
     });
     
     return pdfDoc;
@@ -565,9 +582,8 @@ export class PDFTemplateManager {
       console.log('Template loaded successfully, filling in user data...');
 
       // TOP SECTION: Fill in details right below "Auftraggeber/in"
-      // These go between "Auftraggeber/in" and "Beauftragte"
-      const topLeftMargin = 86; // Left margin to align with template text
-      const topSectionStartY = 670; // Y position right below "Auftraggeber/in"
+      const topLeftMargin = 86;
+      const topSectionStartY = 670;
       const lineSpacing = 14;
       
       // Line 1: First name Last name
@@ -601,12 +617,11 @@ export class PDFTemplateManager {
         color: rgb(0, 0, 0)
       });
 
-      // BOTTOM SECTION: Fill in "Ort, Datum" on the left side
+      // BOTTOM SECTION: Fill in "Ort, Datum"
       const currentDate = new Date().toLocaleDateString('de-CH');
-      const bottomLeftMargin = 125; // Same left margin as top section
+      const bottomLeftMargin = 125;
       
-      // Line 1: City and Date on the line below first "Ort, Datum"
-      const ortDatumY = 274; // Y position on the line below "Ort, Datum"
+      const ortDatumY = 274;
       firstPage.drawText(`${userData.address}, ${currentDate}`, {
         x: bottomLeftMargin,
         y: ortDatumY,
@@ -615,8 +630,7 @@ export class PDFTemplateManager {
         color: rgb(0, 0, 0)
       });
       
-      // Line 2: User's name below the address line
-      const nameLineY = ortDatumY - lineSpacing; // Below the date line
+      const nameLineY = ortDatumY - lineSpacing;
       firstPage.drawText(`${userData.firstName} ${userData.lastName}`, {
         x: bottomLeftMargin,
         y: nameLineY,
@@ -625,15 +639,7 @@ export class PDFTemplateManager {
         color: rgb(0, 0, 0)
       });
 
-      console.log('✅ Application PDF filled with aligned user data:', {
-        name: `${userData.firstName} ${userData.lastName}`,
-        street: streetText,
-        address: `${userData.postalCode} ${userData.city}`,
-        date: `${userData.city}, ${currentDate}`,
-        topSection: `(${topLeftMargin}, ${topSectionStartY})`,
-        bottomOrtDatum: `(${bottomLeftMargin}, ${ortDatumY})`,
-        bottomName: `(${bottomLeftMargin}, ${nameLineY})`
-      });
+      console.log('✅ Application PDF filled with aligned user data');
       
       return pdfDoc;
       
@@ -651,27 +657,187 @@ export class PDFTemplateManager {
     return months[monthIndex];
   }
 
+  /**
+   * COMPLETE SWISS INSURANCE COMPANY ADDRESS DATABASE (2025)
+   * Source: Federal Office of Public Health (BAG/OFSP) - Official List
+   */
   private getInsurerAddress(insurerName: string): { street: string; postal: string; city: string } | null {
+    // Normalize insurer name for better matching
+    const normalizedName = insurerName.toLowerCase().trim();
+    
     const addresses: Record<string, { street: string; postal: string; city: string }> = {
-      'CSS Versicherung AG': { street: 'Tribschenstrasse 21', postal: '6002', city: 'Luzern' },
-      'CSS': { street: 'Tribschenstrasse 21', postal: '6002', city: 'Luzern' },
-      'Helsana': { street: 'Auzelg 18', postal: '8010', city: 'Zurich' },
-      'Helsana Versicherungen AG': { street: 'Auzelg 18', postal: '8010', city: 'Zurich' },
-      'Swica': { street: 'Romerstrasse 38', postal: '8401', city: 'Winterthur' },
-      'Swica Krankenversicherung AG': { street: 'Romerstrasse 38', postal: '8401', city: 'Winterthur' },
-      'Concordia': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
-      'Sanitas': { street: 'Jagergasse 3', postal: '8021', city: 'Zurich' },
-      'Sanitas Krankenversicherung': { street: 'Jagergasse 3', postal: '8021', city: 'Zurich' },
-      'KPT/CPT': { street: 'Weststrasse 10', postal: '3000', city: 'Bern 6' },
-      'KPT': { street: 'Weststrasse 10', postal: '3000', city: 'Bern 6' },
-      'Visana': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 15' },
-      'Visana Services AG': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 15' },
-      'Groupe Mutuel': { street: 'Rue des Cedres 5', postal: '1919', city: 'Martigny' },
-      'Sympany': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
-      'Assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
-      'Assura-Basis AG': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' }
+      // Agrisano
+      'agrisano': { street: 'Laurstrasse 10', postal: '5201', city: 'Brugg AG' },
+      'agrisano krankenkasse ag': { street: 'Laurstrasse 10', postal: '5201', city: 'Brugg AG' },
+      
+      // AMB
+      'amb': { street: 'Route de Verbier 13', postal: '1934', city: 'Le Châble' },
+      'amb assurances sa': { street: 'Route de Verbier 13', postal: '1934', city: 'Le Châble' },
+      
+      // Aquilana
+      'aquilana': { street: 'Bruggerstrasse 46', postal: '5401', city: 'Baden' },
+      'aquilana versicherungen': { street: 'Bruggerstrasse 46', postal: '5401', city: 'Baden' },
+      
+      // Assura
+      'assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
+      'assura-basis sa': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
+      'assura-basis ag': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
+      
+      // Atupri
+      'atupri': { street: 'Zieglerstr. 29', postal: '3001', city: 'Bern' },
+      'atupri gesundheitsversicherung': { street: 'Zieglerstr. 29', postal: '3001', city: 'Bern' },
+      
+      // Avenir (Groupe Mutuel)
+      'avenir': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'avenir assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      
+      // Cassa da malsauns Lumneziaina
+      'lumneziaina': { street: 'Postfach 22', postal: '7144', city: 'Vella' },
+      'cassa da malsauns lumneziaina': { street: 'Postfach 22', postal: '7144', city: 'Vella' },
+      
+      // CM Vallée d'Entremont
+      'cm de la vallée d\'entremont': { street: 'Place Centrale 5', postal: '1937', city: 'Orsières' },
+      'cmveo': { street: 'Place Centrale 5', postal: '1937', city: 'Orsières' },
+      
+      // Concordia
+      'concordia': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
+      'concordia schweiz': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
+      'concordia kranken- und unfallversicherung ag': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
+      
+      // CSS
+      'css': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
+      'css kranken-versicherung ag': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
+      'css versicherung ag': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
+      
+      // EGK
+      'egk': { street: 'Birspark 1', postal: '4242', city: 'Laufen' },
+      'egk grundversicherungen ag': { street: 'Birspark 1', postal: '4242', city: 'Laufen' },
+      
+      // Einsiedler
+      'einsiedler': { street: 'Kronenstrasse 19', postal: '8840', city: 'Einsiedeln' },
+      'einsiedler krankenkasse': { street: 'Kronenstrasse 19', postal: '8840', city: 'Einsiedeln' },
+      
+      // Galenos
+      'galenos': { street: 'Militärstrasse 36', postal: '8021', city: 'Zürich' },
+      'galenos ag': { street: 'Militärstrasse 36', postal: '8021', city: 'Zürich' },
+      
+      // Glarner
+      'glarner': { street: 'Abläsch 8', postal: '8762', city: 'Schwanden' },
+      'glarner krankenversicherung': { street: 'Abläsch 8', postal: '8762', city: 'Schwanden' },
+      
+      // Helsana
+      'helsana': { street: 'Postfach', postal: '8081', city: 'Zürich' },
+      'helsana versicherungen ag': { street: 'Postfach', postal: '8081', city: 'Zürich' },
+      
+      // KLuG
+      'klug': { street: 'Gubelstrasse 22', postal: '6300', city: 'Zug' },
+      'klug krankenversicherung': { street: 'Gubelstrasse 22', postal: '6300', city: 'Zug' },
+      
+      // KPT
+      'kpt': { street: 'Postfach', postal: '3001', city: 'Bern' },
+      'kpt krankenkasse ag': { street: 'Postfach', postal: '3001', city: 'Bern' },
+      'kpt/cpt': { street: 'Postfach', postal: '3001', city: 'Bern' },
+      
+      // Krankenkasse Birchmeier
+      'birchmeier': { street: 'Hauptstrasse 22', postal: '5444', city: 'Künten' },
+      'krankenkasse birchmeier': { street: 'Hauptstrasse 22', postal: '5444', city: 'Künten' },
+      
+      // Krankenkasse Luzerner Hinterland
+      'luzerner hinterland': { street: 'Luzernstrasse 19', postal: '6144', city: 'Zell LU' },
+      'krankenkasse luzerner hinterland': { street: 'Luzernstrasse 19', postal: '6144', city: 'Zell LU' },
+      
+      // SLKK
+      'slkk': { street: 'Hofwiesenstrasse 370', postal: '8050', city: 'Zürich' },
+      'krankenkasse slkk': { street: 'Hofwiesenstrasse 370', postal: '8050', city: 'Zürich' },
+      
+      // Steffisburg
+      'steffisburg': { street: 'Unterdorfstrasse 37', postal: '3612', city: 'Steffisburg' },
+      'krankenkasse steffisburg': { street: 'Unterdorfstrasse 37', postal: '3612', city: 'Steffisburg' },
+      
+      // Visperterminen
+      'visperterminen': { street: 'Dorfstrasse 66', postal: '3932', city: 'Visperterminen' },
+      'krankenkasse visperterminen': { street: 'Dorfstrasse 66', postal: '3932', city: 'Visperterminen' },
+      
+      // Wädenswil
+      'wädenswil': { street: 'Industriestrasse 15', postal: '8820', city: 'Wädenswil' },
+      'krankenkasse wädenswil': { street: 'Industriestrasse 15', postal: '8820', city: 'Wädenswil' },
+      
+      // Mutuel (Groupe Mutuel)
+      'mutuel': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'mutuel assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      
+      // Groupe Mutuel
+      'groupe mutuel': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      
+      // ÖKK
+      'ökk': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
+      'oekk': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
+      'ökk kranken- und unfallversicherungen ag': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
+      
+      // Philos (Groupe Mutuel)
+      'philos': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'philos assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      
+      // Rhenusana
+      'rhenusana': { street: 'Widnauerstrasse 69', postal: '9435', city: 'Heerbrugg' },
+      
+      // Sana24 (Visana Group)
+      'sana24': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      
+      // Sanavals
+      'sanavals': { street: 'Valéstrasse 146E', postal: '7132', city: 'Vals' },
+      'sanavals gesundheitskasse': { street: 'Valéstrasse 146E', postal: '7132', city: 'Vals' },
+      
+      // Sanitas
+      'sanitas': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
+      'sanitas grundversicherungen ag': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
+      'sanitas krankenversicherung': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
+      
+      // Sodalis
+      'sodalis': { street: 'Balfrinstr. 15', postal: '3930', city: 'Visp' },
+      'sodalis gesundheitsgruppe': { street: 'Balfrinstr. 15', postal: '3930', city: 'Visp' },
+      
+      // Sumiswalder
+      'sumiswalder': { street: 'Spitalstrasse 47', postal: '3454', city: 'Sumiswald' },
+      'sumiswalder krankenkasse': { street: 'Spitalstrasse 47', postal: '3454', city: 'Sumiswald' },
+      
+      // SWICA
+      'swica': { street: 'Römerstrasse 38', postal: '8400', city: 'Winterthur' },
+      'swica krankenversicherung ag': { street: 'Römerstrasse 38', postal: '8400', city: 'Winterthur' },
+      
+      // Visana
+      'visana': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      'visana services ag': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      
+      // Vita Surselva
+      'vita surselva': { street: 'Bahnhofstrasse 33', postal: '7130', city: 'Ilanz' },
+      
+      // Vivacare (Visana Group)
+      'vivacare': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      
+      // Sympany
+      'sympany': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
+      'vivao sympany ag': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
+      'vivao': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' }
     };
-    return addresses[insurerName] || null;
+    
+    // Try exact match first
+    if (addresses[normalizedName]) {
+      console.log(`✅ Exact match found for: ${insurerName}`);
+      return addresses[normalizedName];
+    }
+    
+    // Try partial match (if insurer name contains any key)
+    for (const [key, value] of Object.entries(addresses)) {
+      if (normalizedName.includes(key) || key.includes(normalizedName)) {
+        console.log(`✅ Partial match found: ${key} for ${insurerName}`);
+        return value;
+      }
+    }
+    
+    console.warn(`⚠️ No address found for insurer: ${insurerName}`);
+    console.warn(`   Normalized search term: ${normalizedName}`);
+    return null;
   }
 
   async validateTemplates(): Promise<{

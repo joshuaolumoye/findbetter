@@ -1,4 +1,4 @@
-// services/SkribbleService.ts - UPDATED with SES + Enhanced Debugging
+// services/SkribbleService.ts - FIXED Visual Signature Page Issue
 import { PDFTemplateManager } from './PDFTemplateManager';
 
 interface SkribbleConfig {
@@ -114,7 +114,7 @@ export class SkribbleService {
 
       console.log('PDFs generated successfully, creating Skribble SES signature requests...');
 
-      // Create BOTH signature requests with SES
+      // Create BOTH signature requests with SES (WITHOUT visual signatures)
       const signatureRequests = await this.createBothSESSignatureRequests({
         cancellationPdf,
         applicationPdf,
@@ -142,7 +142,7 @@ export class SkribbleService {
         userEmail: userData.email,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         instructions: 'User will receive email invitations to sign both documents. No Skribble account required.',
-        mode: 'ses' // Add mode field
+        mode: 'ses'
       };
 
     } catch (error) {
@@ -172,7 +172,7 @@ export class SkribbleService {
       const cancellationBase64 = params.cancellationPdf.toString('base64');
       const applicationBase64 = params.applicationPdf.toString('base64');
 
-      // Create cancellation signature request with SES
+      // Create cancellation signature request with SES (NO visual signature)
       const cancellationRequest = await this.createSESSignatureRequest({
         title: `KVG Kündigung ${new Date().getFullYear()} - ${params.userData.firstName} ${params.userData.lastName}`,
         message: 'Bitte unterschreiben Sie diese wichtige KVG-Kündigung. Sie benötigen kein Skribble-Konto - klicken Sie einfach auf den Link in der E-Mail.',
@@ -181,7 +181,7 @@ export class SkribbleService {
         accessToken: params.accessToken
       });
 
-      // Create application signature request with SES
+      // Create application signature request with SES (NO visual signature)
       const applicationRequest = await this.createSESSignatureRequest({
         title: `Krankenversicherungsantrag ${params.selectedInsurance.insurer} - ${params.userData.firstName} ${params.userData.lastName}`,
         message: 'Bitte unterschreiben Sie diesen Krankenversicherungsantrag. Sie benötigen kein Skribble-Konto - klicken Sie einfach auf den Link in der E-Mail.',
@@ -202,7 +202,8 @@ export class SkribbleService {
   }
 
   /**
-   * Create SES (Simple Electronic Signature) request with enhanced debugging
+   * Create SES (Simple Electronic Signature) request WITHOUT visual signature
+   * This avoids page reference errors and keeps the PDF clean
    */
   private async createSESSignatureRequest(params: {
     title: string;
@@ -217,12 +218,9 @@ export class SkribbleService {
     try {
       const signatureUrl = `${this.config.baseUrl}/v2/signature-requests`;
 
-      // SES REQUEST PAYLOAD - GUEST SIGNING WITHOUT SKRIBBLE ACCOUNT
-      // Key: Use signer_identity_data instead of account_email for guest signing
-      
-      // OPTION 1: WITH VISUAL SIGNATURE (signature appears on PDF)
-      // Requires position coordinates - adjust based on your PDF layout
-      const requestPayloadWithVisual = {
+      // SES REQUEST PAYLOAD WITHOUT VISUAL SIGNATURE
+      // This is the cleanest approach and avoids page reference errors
+      const requestPayload = {
         title: params.title,
         message: params.message,
         content: params.content,
@@ -230,63 +228,23 @@ export class SkribbleService {
           {
             signer_identity_data: {
               email_address: params.signerEmail
-            },
-            // signature_standard: "ses",
-            visual_signature: {
-              type: "picture-and-text",
-              position: {
-                page: 1,           // First page
-                x: 100,            // 100 points from left (~3.5cm)
-                y: 150,            // 150 points from bottom (~5.3cm)
-                width: 200,        // Signature box width
-                height: 80         // Signature box height
-              }
             }
+            // NO visual_signature field = no visible signature on PDF
+            // Document is still cryptographically signed with SES!
           }
         ],
         quality: "SES",
         legislation: "ZERTES"
       };
-      
-      // OPTION 2: WITHOUT VISUAL SIGNATURE (cleaner, simpler)
-      // Signature still applies cryptographically, just not visible on PDF
-      // This is simpler and works well for insurance documents
-      const requestPayloadWithoutVisual = {
-        title: params.title,
-        message: params.message,
-        content: params.content,
-        signatures: [
-          {
-            signer_identity_data: {
-              email_address: params.signerEmail
-            },
-           
-            // No visual_signature field = no visible signature on PDF
-            // Document is still legally signed!
-          }
-        ],
-        quality: "SES",
-        legislation: "ZERTES"
-      };
-      
-      // Choose which payload to use
-      // Set to 'false' to disable visual signature (simpler, recommended for start)
-      const useVisualSignature = false;
-      const requestPayload = useVisualSignature 
-        ? requestPayloadWithVisual 
-        : requestPayloadWithoutVisual;
 
       console.log('Sending SES signature request to Skribble:', { 
         url: signatureUrl, 
         title: params.title,
         signerEmail: params.signerEmail,
         contentSize: params.content.length,
-        payloadStructure: {
-          hasTitle: !!requestPayload.title,
-          hasMessage: !!requestPayload.message,
-          hasContent: !!requestPayload.content,
-          signaturesCount: requestPayload.signatures.length
-        }
+        quality: 'SES',
+        legislation: 'ZERTES',
+        hasVisualSignature: false
       });
 
       const response = await fetch(signatureUrl, {
@@ -320,6 +278,8 @@ export class SkribbleService {
           throw new Error('PDF file too large for Skribble (max 25MB)');
         } else if (response.status === 422) {
           throw new Error('Invalid PDF format or corrupted file');
+        } else if (response.status === 400) {
+          throw new Error(`Bad request: ${errorText}`);
         } else if (response.status === 500) {
           throw new Error('Skribble server error - please try again in a few minutes');
         }
@@ -383,6 +343,7 @@ export class SkribbleService {
 
       console.log(`✅ SES signature request created: ${result.id}`);
       console.log(`   Signature standard: SES (Simple Electronic Signature)`);
+      console.log(`   Visual signature: None (clean PDF)`);
       console.log(`   Signing URL: ${sesSigningUrl}`);
       console.log(`   Response contained: ${Object.keys(result).join(', ')}`);
 
@@ -508,6 +469,7 @@ export const getSkribbleConfig = () => {
     hasApiKey: !!config.apiKey,
     hasUsername: !!config.username,
     signatureStandard: 'SES',
+    visualSignature: false,
     noAccountRequired: true,
     noVerificationRequired: true
   });
