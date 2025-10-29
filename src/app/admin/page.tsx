@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Menu } from 'lucide-react';
 import Sidebar from '../../../components/admin/Sidebar';
 import Dashboard from '../../../components/admin/Dashboard';
 import Analytics from '../../../components/admin/Analytics';
@@ -21,7 +22,8 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isLoading, setIsLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
-  
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const router = useRouter();
 
   // Check authentication on component mount
@@ -140,26 +142,44 @@ export default function AdminPage() {
 
   return (
     <div className="flex min-h-screen bg-gray-100">
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        onLogout={handleLogout} 
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      <main className="flex-1 p-6 overflow-y-auto">
-        <div className="mb-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900">Welcome back, {user.name}</h1>
-                <p className="text-sm text-gray-600">{user.email} • {user.role}</p>
-              </div>
-              <div className="text-sm text-gray-500">
-                Last login: {new Date().toLocaleDateString()}
+      <main className="flex-1 overflow-y-auto">
+        {/* Mobile Header with Hamburger */}
+        <div className="lg:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <Menu className="h-6 w-6 text-gray-700" />
+            </button>
+            <h1 className="text-lg font-semibold text-gray-900">FindBetter.ch</h1>
+            <div className="w-10"></div> {/* Spacer for centering */}
+          </div>
+        </div>
+
+        <div className="p-4 md:p-6">
+          <div className="mb-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h1 className="text-lg font-semibold text-gray-900">Welcome back, {user.name}</h1>
+                  <p className="text-sm text-gray-600">{user.email} • {user.role}</p>
+                </div>
+                <div className="text-sm text-gray-500">
+                  Last login: {new Date().toLocaleDateString()}
+                </div>
               </div>
             </div>
           </div>
+          {renderContent()}
         </div>
-        {renderContent()}
       </main>
     </div>
   );

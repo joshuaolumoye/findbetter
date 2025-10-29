@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bell,
   Check,
-  X,
   User,
   FileText,
   Clock,
@@ -11,8 +11,7 @@ import {
   Filter,
   Trash2,
   Eye,
-  RefreshCw,
-  Settings
+  RefreshCw
 } from 'lucide-react';
 
 interface Notification {
@@ -30,6 +29,7 @@ interface Notification {
 }
 
 export default function Notifications() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -354,13 +354,15 @@ export default function Notifications() {
             <div
               key={notification.id}
               className={`bg-white rounded-xl shadow-sm border-2 p-5 hover:shadow-md transition-all cursor-pointer ${
-                !notification.is_read 
-                  ? 'border-blue-300 bg-blue-50/30' 
+                !notification.is_read
+                  ? 'border-blue-300 bg-blue-50/30'
                   : 'border-gray-200'
               }`}
               onClick={() => {
-                setSelectedNotification(notification);
                 if (!notification.is_read) markAsRead(notification.id);
+                if (notification.user_id) {
+                  router.push(`/admin?user=${notification.user_id}`);
+                }
               }}
             >
               <div className="flex items-start justify-between">
@@ -429,54 +431,6 @@ export default function Notifications() {
           ))
         )}
       </div>
-
-      {/* Notification Detail Modal */}
-      {selectedNotification && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-3">
-                  {getNotificationIcon(selectedNotification.type)}
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {selectedNotification.title}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setSelectedNotification(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6">
-              <p className="text-gray-700 mb-4">{selectedNotification.message}</p>
-              {selectedNotification.metadata && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">Additional Details</h3>
-                  <pre className="text-xs text-gray-600 overflow-x-auto">
-                    {JSON.stringify(selectedNotification.metadata, null, 2)}
-                  </pre>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                <span className="text-sm text-gray-500">
-                  {new Date(selectedNotification.created_at).toLocaleString('de-CH')}
-                </span>
-                {selectedNotification.user_id && (
-                  <a
-                    href={`/admin?user=${selectedNotification.user_id}`}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-                  >
-                    View User Profile
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

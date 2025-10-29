@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // Build query with filters
     let query = `
-      SELECT 
+      SELECT
         u.id,
         u.status,
         CONCAT(u.first_name, ' ', u.last_name) as user_name,
@@ -47,11 +47,12 @@ export async function GET(request: NextRequest) {
         u.canton as user_canton,
         u.birth_date,
         u.current_insurance_policy_number,
+        u.old_insurer,
         u.insurance_start_date,
         u.id_document_path,
         u.created_at,
         u.updated_at,
-        
+
         iq.id as quote_id,
         iq.search_current_insurer as current_insurer,
         iq.selected_insurer,
@@ -61,9 +62,9 @@ export async function GET(request: NextRequest) {
         iq.selected_accident_inclusion,
         iq.annual_savings,
         iq.quote_status,
-        
+
         CASE WHEN uc.id IS NOT NULL THEN 'Complete' ELSE 'Incomplete' END as compliance_status
-        
+
       FROM users u
       LEFT JOIN insurance_quotes iq ON u.id = iq.user_id
       LEFT JOIN user_compliance uc ON u.id = uc.user_id
@@ -119,7 +120,8 @@ export async function GET(request: NextRequest) {
           userPostalCode: row.user_postal_code,
           birthDate: row.birth_date,
 
-          // Current Insurance
+          // Current Insurance (OLD INSURER)
+          oldInsurer: row.old_insurer || null,
           currentInsurer: row.current_insurer || null,
           currentPolicyNumber: row.current_insurance_policy_number || null,
           currentPremium: currentPremium,

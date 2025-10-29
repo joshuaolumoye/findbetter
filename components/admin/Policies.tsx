@@ -31,6 +31,62 @@ import {
   TrendingDown
 } from 'lucide-react';
 
+// Insurance Companies Mapping
+const insuranceCompanies = [
+  { id: "0", name: "None" },
+  { id: "1560", name: "Agrisano" },
+  { id: "1507", name: "AMB Assurances SA" },
+  { id: "0032", name: "Aquilana" },
+  { id: "1569", name: "Arcosana (CSS)" },
+  { id: "1542", name: "Assura" },
+  { id: "0312", name: "Atupri" },
+  { id: "0343", name: "Avenir (Groupe Mutuel)" },
+  { id: "1322", name: "Birchmeier" },
+  { id: "1575", name: "Compact" },
+  { id: "0290", name: "Concordia" },
+  { id: "0008", name: "CSS" },
+  { id: "0774", name: "Easy Sana (Groupe Mutuel)" },
+  { id: "0881", name: "EGK" },
+  { id: "0134", name: "Einsiedler" },
+  { id: "1386", name: "Galenos" },
+  { id: "0780", name: "Glarner" },
+  { id: "1562", name: "Helsana" },
+  { id: "1142", name: "Ingenbohl" },
+  { id: "1529", name: "Intras (CSS)" },
+  { id: "0829", name: "KluG" },
+  { id: "0762", name: "Kolping (Sympany)" },
+  { id: "0376", name: "KPT" },
+  { id: "0558", name: "KVF" },
+  { id: "0820", name: "Lumneziana" },
+  { id: "0360", name: "Luzerner Hinterland" },
+  { id: "0057", name: "Moove (Sympany)" },
+  { id: "1479", name: "Mutuel" },
+  { id: "0455", name: "ÖKK" },
+  { id: "1535", name: "Philos (Groupe Mutuel)" },
+  { id: "1998", name: "Prezisa" },
+  { id: "0994", name: "Progrès" },
+  { id: "0182", name: "Provita" },
+  { id: "1401", name: "Rhenusana" },
+  { id: "1568", name: "sana24" },
+  { id: "1577", name: "Sanagate (CSS)" },
+  { id: "0901", name: "Sanavals" },
+  { id: "1509", name: "Sanitas" },
+  { id: "0923", name: "SLKK" },
+  { id: "0941", name: "Sodalis" },
+  { id: "0246", name: "Steffisburg" },
+  { id: "1331", name: "Stoffel Mels" },
+  { id: "0194", name: "Sumiswalder" },
+  { id: "0062", name: "Supra" },
+  { id: "1384", name: "Swica" },
+  { id: "0509", name: "Sympany" },
+  { id: "1113", name: "Vallée d'Entremont" },
+  { id: "1555", name: "Visana" },
+  { id: "1040", name: "Visperterminen" },
+  { id: "0966", name: "Vita" },
+  { id: "1570", name: "Vivacare" },
+  { id: "1318", name: "Wädenswil" },
+];
+
 interface Policy {
   id: number;
   userId: number;
@@ -41,13 +97,14 @@ interface Policy {
   userCanton: string;
   userPostalCode: string;
   birthDate: string;
-  
-  // Current Insurance
+
+  // Current Insurance (OLD INSURER)
+  oldInsurer?: string;
   currentInsurer?: string;
   currentPolicyNumber?: string;
   currentPremium?: number;
   insuranceStartDate?: string;
-  
+
   // New/Selected Insurance
   selectedInsurer: string;
   selectedTariffName: string;
@@ -55,15 +112,15 @@ interface Policy {
   selectedFranchise: string;
   selectedAccidentInclusion: string;
   annualSavings: number;
-  
+
   // Status
   status: 'pending' | 'active' | 'approved' | 'rejected' | 'cancelled';
   quoteStatus: string;
   complianceStatus: 'Complete' | 'Incomplete';
-  
+
   // Documents
   documents: PolicyDocument[];
-  
+
   // Dates
   createdAt: string;
   updatedAt: string;
@@ -84,6 +141,13 @@ interface DocumentModalProps {
   document: PolicyDocument;
   onClose: () => void;
 }
+
+// Helper function to get insurance name from ID
+const getInsuranceNameById = (id: string): string => {
+  if (!id) return 'N/A';
+  const company = insuranceCompanies.find(c => c.id === id);
+  return company ? company.name : id;
+};
 
 function DocumentModal({ document, onClose }: DocumentModalProps) {
   return (
@@ -193,7 +257,7 @@ export default function Policies() {
           p.userName.toLowerCase().includes(term) ||
           p.userEmail.toLowerCase().includes(term) ||
           p.selectedInsurer.toLowerCase().includes(term) ||
-          p.currentInsurer?.toLowerCase().includes(term) ||
+          getInsuranceNameById(p.oldInsurer || '').toLowerCase().includes(term) ||
           p.userPostalCode.includes(term)
       );
     }
@@ -543,30 +607,18 @@ export default function Policies() {
                     <div>
                       <h4 className="text-md font-semibold text-gray-900 mb-4">Insurance Comparison</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Current Insurance */}
+                        {/* Current Insurance (OLD INSURER) */}
                         <div className="bg-white rounded-lg border border-gray-200 p-4">
                           <div className="flex items-center space-x-2 mb-3">
                             <Building className="h-5 w-5 text-gray-600" />
                             <h5 className="font-semibold text-gray-900">Current Insurance</h5>
                           </div>
-                          {policy.currentInsurer ? (
+                          {policy.oldInsurer ? (
                             <div className="space-y-2 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Insurer:</span>
-                                <span className="font-medium">{policy.currentInsurer}</span>
+                                <span className="font-medium">{getInsuranceNameById(policy.oldInsurer)}</span>
                               </div>
-                              {policy.currentPolicyNumber && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Policy #:</span>
-                                  <span className="font-medium">{policy.currentPolicyNumber}</span>
-                                </div>
-                              )}
-                              {policy.currentPremium && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Premium:</span>
-                                  <span className="font-medium">{formatCurrency(policy.currentPremium)}</span>
-                                </div>
-                              )}
                             </div>
                           ) : (
                             <p className="text-sm text-gray-500">No current insurance information</p>
@@ -584,6 +636,12 @@ export default function Policies() {
                               <span className="text-gray-600">Insurer:</span>
                               <span className="font-medium">{policy.selectedInsurer}</span>
                             </div>
+                            {policy.currentPolicyNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Policy #:</span>
+                                <span className="font-medium">{policy.currentPolicyNumber}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
                               <span className="text-gray-600">Tariff:</span>
                               <span className="font-medium">{policy.selectedTariffName}</span>
