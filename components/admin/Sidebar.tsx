@@ -25,7 +25,7 @@ export default function Sidebar({ activeTab, setActiveTab, onLogout }: SidebarPr
     // { id: 'claims', label: 'Claims', icon: Shield },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    // { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
