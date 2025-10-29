@@ -22,7 +22,7 @@ export default function Sidebar({ activeTab, setActiveTab, onLogout }: SidebarPr
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'policies', label: 'Policies', icon: FileText },
-    { id: 'claims', label: 'Claims', icon: Shield },
+    // { id: 'claims', label: 'Claims', icon: Shield },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },

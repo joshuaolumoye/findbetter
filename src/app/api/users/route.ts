@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
       canton: body.canton || null,
       nationality: body.nationality || 'swiss',
       ahvNumber: body.ahvNumber?.trim() || null,
+      oldInsurer: body.oldInsurer?.trim() || null,
       currentInsurancePolicyNumber: body.currentInsurancePolicyNumber?.trim() || null,
       insuranceStartDate: body.insuranceStartDate || '01.01.2025',
       idDocumentPath: body.idDocument ? await saveBase64File(body.idDocument, body.email) : null,

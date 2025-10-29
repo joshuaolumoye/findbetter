@@ -107,8 +107,13 @@ export class SkribbleService {
 
       // Generate PDFs
       console.log('Generating KVG documents...');
+      console.log('🔹 Insurance data for PDF generation:', {
+        oldInsurer: userData.oldInsurer, // OLD insurer being cancelled
+        currentInsurer: userData.currentInsurer, // NEW insurer selected
+        selectedInsurer: selectedInsurance.insurer // NEW insurer from quote
+      });
       const [cancellationPdf, applicationPdf] = await Promise.all([
-        this.pdfManager.generateCancellationPDF(userData, userData.currentInsurer),
+        this.pdfManager.generateCancellationPDF(userData, userData.oldInsurer), // ✅ FIXED: Use oldInsurer for cancellation
         this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance)
       ]);
 

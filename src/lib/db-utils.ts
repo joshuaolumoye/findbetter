@@ -1,4 +1,4 @@
-// lib/db-utils.ts - PRODUCTION MODE with STREET FIELD FIX
+// lib/db-utils.ts - PRODUCTION MODE with STREET FIELD AND OLD_INSURER FIX
 import pool from './database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
@@ -11,13 +11,14 @@ export interface UserInsuranceData {
   phone: string;
   birthDate: string;
   address: string;
-  street?: string; // Street field
+  street?: string;
   postalCode: string;
   city?: string;
   canton?: string;
   nationality?: string;
   ahvNumber?: string;
   currentInsurancePolicyNumber?: string;
+  oldInsurer?: string; // ✅ OLD INSURER (previous insurance company)
   insuranceStartDate?: string;
   idDocumentPath?: string;
   interestedInConsultation: boolean;
@@ -29,7 +30,8 @@ export interface UserInsuranceData {
     franchise: string;
     accidentCoverage: string;
     currentModel: string;
-    currentInsurer?: string;
+    currentInsurer?: string; // ✅ NEW INSURER (selected insurance)
+    oldInsurer?: string; // ✅ OLD INSURER (from form)
     newToSwitzerland: boolean;
   };
   
@@ -82,13 +84,14 @@ export interface DetailedUser extends RowDataPacket {
   phone: string;
   birth_date: string;
   address: string;
-  street: string; // Street field
+  street: string;
   postal_code: string;
   city: string;
   canton: string;
   nationality: string;
   ahv_number: string;
   current_insurance_policy_number: string;
+  old_insurer: string; // ✅ OLD INSURER FIELD
   insurance_start_date: string;
   id_document_path: string;
   interested_in_consultation: boolean;
@@ -97,12 +100,13 @@ export interface DetailedUser extends RowDataPacket {
   updated_at: string;
 }
 
-// PRODUCTION: Create a new user with insurance data - WITH STREET FIELD
+// ✅ PRODUCTION: Create a new user with insurance data - WITH STREET AND OLD_INSURER FIELDS
 export async function createUserWithInsurance(data: UserInsuranceData): Promise<number> {
   let connection;
   
   try {
-    console.log('PRODUCTION: Creating user with insurance data and street field...');
+    console.log('PRODUCTION: Creating user with insurance data, street, and old_insurer fields...');
+    console.log('Old Insurer from data:', data.oldInsurer);
     
     // Get connection with timeout protection
     connection = await Promise.race([
@@ -135,16 +139,20 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     // Step 2: Determine canton from postal code
     const canton = determineCantonFromPostalCode(data.postalCode);
     
-    // Step 3: Insert user with STREET field included
-    console.log('Inserting new user with street field:', data.street);
+    // Step 3: Insert user with STREET and OLD_INSURER fields included
+    console.log('Inserting new user with street and old_insurer:', {
+      street: data.street,
+      oldInsurer: data.oldInsurer
+    });
+    
     const [userResult] = await connection.execute<ResultSetHeader>(
       `INSERT INTO users (
         salutation, first_name, last_name, email, phone, birth_date,
         address, street, postal_code, city, canton, nationality, ahv_number,
-        current_insurance_policy_number, insurance_start_date,
+        current_insurance_policy_number, old_insurer, insurance_start_date,
         id_document_path, interested_in_consultation, status, 
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
       [
         data.salutation,
         data.firstName.trim(),
@@ -153,13 +161,14 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
         data.phone.trim(),
         data.birthDate,
         data.address.trim(),
-        data.street?.trim() || null, // ✅ STREET FIELD NOW INCLUDED IN INSERT
+        data.street?.trim() || null, // ✅ STREET FIELD
         data.postalCode,
         data.city || extractCityFromAddress(data.address),
         canton,
         data.nationality || 'swiss',
         data.ahvNumber || null,
         data.currentInsurancePolicyNumber || null,
+        data.oldInsurer?.trim() || null, // ✅ OLD_INSURER FIELD NOW INCLUDED
         data.insuranceStartDate || '2025-01-01',
         data.idDocumentPath || null,
         data.interestedInConsultation
@@ -172,7 +181,7 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
       throw new Error('Failed to create user - no ID returned');
     }
     
-    console.log('✅ User created with ID:', userId, 'and street:', data.street);
+    console.log('✅ User created with ID:', userId, 'Street:', data.street, 'Old Insurer:', data.oldInsurer);
     
     // Step 4: Insert insurance quote with calculated savings
     const annualSavings = calculateAnnualSavings(data.selectedInsurance.premium);
@@ -239,13 +248,17 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     await connection.execute(
       `INSERT INTO admin_actions (
         user_id, quote_id, admin_user, action_type, action_details, created_at
-      ) VALUES (?, ?, 'system', 'user_created', 'Production user registration completed with street field', NOW())`,
-      [userId, quoteId]
+      ) VALUES (?, ?, 'system', 'user_created', ?, NOW())`,
+      [
+        userId, 
+        quoteId,
+        `Production user registration completed. Street: ${data.street || 'N/A'}, Old Insurer: ${data.oldInsurer || 'N/A'}`
+      ]
     );
     
     await connection.commit();
     
-    console.log(`✅ PRODUCTION: User created successfully with ID: ${userId}, Quote ID: ${quoteId}, Street: ${data.street}`);
+    console.log(`✅ PRODUCTION: User created successfully with ID: ${userId}, Quote ID: ${quoteId}, Street: ${data.street}, Old Insurer: ${data.oldInsurer}`);
     return userId;
     
   } catch (error) {
@@ -365,7 +378,7 @@ export async function getUserDetails(userId: number): Promise<{
       ).then(([rows]: [any[], any]) => rows)
     ]);
     
-    console.log(`PRODUCTION: User details retrieved for ID: ${userId}, Street: ${userRows[0].street}`);
+    console.log(`PRODUCTION: User details retrieved for ID: ${userId}, Street: ${userRows[0].street}, Old Insurer: ${userRows[0].old_insurer}`);
     
     return {
       user: userRows[0],

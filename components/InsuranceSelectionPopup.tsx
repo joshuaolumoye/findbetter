@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useEffect, useState } from "react";
 import {
@@ -24,16 +25,15 @@ const InsuranceSelectionPopup = ({
     phone: "",
     email: "",
     address: searchCriteria?.fullAddress || "",
-    street: "", // City/Street field
+    street: "",
     nationality: "",
     ahvNumber: "",
+    oldInsurer: searchCriteria?.aktuelleKKName || "", // ✅ OLD INSURER NAME from calculator
     currentInsurer:
       selectedInsurance?.insurerName ||
       selectedInsurance?.Insurer ||
       selectedInsurance?.Versicherer ||
-      (searchCriteria?.aktuelleKK !== "Aktuelle KK"
-        ? searchCriteria?.aktuelleKK
-        : ""),
+      "", // ✅ NEW INSURER from selection
     currentPolicyNumber: "",
     insuranceStartDate:
       searchCriteria?.newToSwitzerland && searchCriteria?.entryDate
@@ -44,7 +44,6 @@ const InsuranceSelectionPopup = ({
     idDocumentFrontBase64: null,
     idDocumentBackBase64: null,
     informationArt45: false,
-    // agbAccepted: false,
     mandateAccepted: false,
     terminationAuthority: false,
     consultationInterest: false,
@@ -65,25 +64,22 @@ const InsuranceSelectionPopup = ({
       updates.insuranceStartDate = "2026-01-01";
     }
 
-    // if (searchCriteria?.fullAddress) {
-    //   // Filter out duplicate part: "6416 - Steinerberg - Steinerberg" -> "6416 - Steinerberg"
-    //   const addressParts = searchCriteria.fullAddress.split(' - ');
-    //   const cleanAddress = addressParts.length > 2
-    //     ? `${addressParts[0]} - ${addressParts[1]}`
-    //     : searchCriteria.fullAddress;
-    //   updates.address = cleanAddress;
-    // }
-
+    // ✅ Update currentInsurer when selectedInsurance changes
     if (selectedInsurance?.insurerName || selectedInsurance?.Insurer) {
       updates.currentInsurer =
         selectedInsurance.insurerName || selectedInsurance.Insurer;
+    }
+
+    // ✅ Keep oldInsurer from searchCriteria
+    if (searchCriteria?.aktuelleKK && searchCriteria.aktuelleKK !== "Aktuelle KK") {
+      updates.oldInsurer = searchCriteria.aktuelleKK;
     }
 
     setFormData((prev) => ({ ...prev, ...updates }));
   }, [
     searchCriteria?.newToSwitzerland,
     searchCriteria?.entryDate,
-    searchCriteria?.fullAddress,
+    searchCriteria?.aktuelleKK,
     selectedInsurance?.insurerName,
     selectedInsurance?.Insurer,
   ]);
@@ -97,8 +93,8 @@ const InsuranceSelectionPopup = ({
       { key: "phone", label: "Telefonnummer" },
       { key: "email", label: "E-Mail" },
       { key: "address", label: "Adresse" },
-      { key: "street", label: "Stadt" }, // NEW: Make street required
-      { key: "currentInsurer", label: "Aktuelle Krankenversicherung" },
+      { key: "street", label: "Strasse" },
+      { key: "currentInsurer", label: "Neue Krankenversicherung" },
     ];
 
     if (!searchCriteria?.newToSwitzerland) {
@@ -135,7 +131,6 @@ const InsuranceSelectionPopup = ({
 
     const requiredCheckboxes = [
       { key: "informationArt45", label: "Information nach Art. 45" },
-      // { key: 'agbAccepted', label: 'AGB' },
       { key: "mandateAccepted", label: "Auftrag und Vollmacht" },
       { key: "terminationAuthority", label: "Vollmacht zur Kündigung" },
     ];
@@ -195,9 +190,11 @@ const InsuranceSelectionPopup = ({
     try {
       const postalCode =
         searchCriteria?.plz || extractPostalCode(formData.address, "8001");
-      const city = extractCity(formData.address) || formData.street; // Use street field as city fallback
+      const city = extractCity(formData.address) || formData.street;
 
-      console.log("STEP 1: Saving user to database with street field...");
+      console.log("STEP 1: Saving user to database...");
+      console.log("Old Insurer (aktuelleKK):", formData.oldInsurer);
+      console.log("New Insurer (selected):", formData.currentInsurer);
 
       const userPayload = {
         salutation: formData.salutation,
@@ -207,13 +204,14 @@ const InsuranceSelectionPopup = ({
         phone: formData.phone.trim(),
         birthDate: formData.birthDate,
         address: formData.address.trim(),
-        street: formData.street.trim(), // NEW: Include street in payload
+        street: formData.street.trim(),
         postalCode: postalCode,
-        city: city || formData.street.trim(), // Use street as city
+        city: city || formData.street.trim(),
         nationality: formData.nationality.trim() || "swiss",
         ahvNumber: searchCriteria?.newToSwitzerland
           ? null
           : formData.ahvNumber.trim() || null,
+        oldInsurer: formData.oldInsurer || searchCriteria?.aktuelleKK || null, // ✅ OLD INSURER
         currentInsurancePolicyNumber:
           formData.currentPolicyNumber.trim() || null,
         insuranceStartDate: formData.insuranceStartDate || "01.01.2026",
@@ -226,7 +224,8 @@ const InsuranceSelectionPopup = ({
           accidentCoverage:
             searchCriteria?.unfalldeckung || "Mit Unfalldeckung",
           currentModel: searchCriteria?.aktuellesModell || "Standard",
-          currentInsurer: formData.currentInsurer,
+          currentInsurer: formData.currentInsurer, // ✅ NEW INSURER
+          oldInsurer: formData.oldInsurer, // ✅ OLD INSURER
           newToSwitzerland: searchCriteria?.newToSwitzerland || false,
         },
 
@@ -234,6 +233,7 @@ const InsuranceSelectionPopup = ({
           insurer:
             selectedInsurance?.Insurer ||
             selectedInsurance?.insurerName ||
+            formData.currentInsurer ||
             "Unknown",
           tariffName:
             selectedInsurance?.["Tariff name"] ||
@@ -259,17 +259,17 @@ const InsuranceSelectionPopup = ({
 
         compliance: {
           informationArt45: formData.informationArt45,
-          // agbAccepted: formData.agbAccepted,
+          agbAccepted: true, // Set to true by default
           mandateAccepted: formData.mandateAccepted,
           terminationAuthority: formData.terminationAuthority,
           consultationInterest: formData.consultationInterest,
         },
       };
 
-      console.log("Payload with street field:", {
-        address: userPayload.address,
-        street: userPayload.street,
-        city: userPayload.city,
+      console.log("Payload with old and new insurer:", {
+        oldInsurer: userPayload.oldInsurer,
+        currentInsurer: userPayload.searchCriteria.currentInsurer,
+        selectedInsurer: userPayload.selectedInsurance.insurer,
       });
 
       const userResponse = await fetch("/api/users", {
@@ -389,10 +389,8 @@ const InsuranceSelectionPopup = ({
         street: "",
         nationality: "",
         ahvNumber: "",
-        currentInsurer:
-          searchCriteria?.aktuelleKK !== "Aktuelle KK"
-            ? searchCriteria?.aktuelleKK
-            : "",
+        oldInsurer: searchCriteria?.aktuelleKK || "",
+        currentInsurer: "",
         currentPolicyNumber: "",
         insuranceStartDate: "",
         idDocumentFront: null,
@@ -400,7 +398,6 @@ const InsuranceSelectionPopup = ({
         idDocumentFrontBase64: null,
         idDocumentBackBase64: null,
         informationArt45: false,
-        // agbAccepted: false,
         mandateAccepted: false,
         terminationAuthority: false,
         consultationInterest: false,
@@ -412,24 +409,6 @@ const InsuranceSelectionPopup = ({
     }
     onClose();
   };
-
-  const swissInsuranceCompanies = [
-    "CSS Versicherung AG",
-    "Helsana Versicherungen AG",
-    "Swica Krankenversicherung AG",
-    "Concordia",
-    "Sanitas Krankenversicherung",
-    "KPT/CPT",
-    "Visana Services AG",
-    "Groupe Mutuel",
-    "GALENOS Versicherung AG",
-    "Assura-Basis AG",
-    "Sympany",
-    "ÖKK",
-    "EGK-Gesundheitskasse",
-    "Atupri",
-    "Andere",
-  ];
 
   if (!isOpen) return null;
 
@@ -535,6 +514,7 @@ const InsuranceSelectionPopup = ({
                       <option value="Frau">Frau</option>
                     </select>
                   </div>
+
                   {/* First Name & Last Name */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
@@ -589,6 +569,7 @@ const InsuranceSelectionPopup = ({
                       )}
                     </div>
                   </div>
+
                   {/* Birth Date & Phone */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
@@ -645,6 +626,7 @@ const InsuranceSelectionPopup = ({
                       )}
                     </div>
                   </div>
+
                   {/* Email & Address */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
@@ -700,38 +682,36 @@ const InsuranceSelectionPopup = ({
                         </p>
                       )}
                     </div>
-                  </div>{" "}
-                  {/* ✅ close this div properly before starting next field */}
-                  {/* Street/City Field - REQUIRED */}
-                  
-                  {/* Current Insurer & Policy Number */}
+                  </div>
+
+                  {/* Street & Policy Number */}
                   <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     <div className="w-full lg:w-1/2">
-                    <label
-                      htmlFor="street"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Strasse*
-                    </label>
-                    <input
-                      type="text"
-                      id="street"
-                      value={formData.street}
-                      onChange={handleInputChange}
-                      placeholder="z.B. Musterstrasse 14"
-                      className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
-                        validationErrors.street
-                          ? "ring-2 ring-red-500 bg-red-50"
-                          : "focus:ring-blue-500"
-                      }`}
-                      required
-                    />
-                    {validationErrors.street && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {validationErrors.street}
-                      </p>
-                    )}
-                  </div>
+                      <label
+                        htmlFor="street"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Strasse*
+                      </label>
+                      <input
+                        type="text"
+                        id="street"
+                        value={formData.street}
+                        onChange={handleInputChange}
+                        placeholder="z.B. Musterstrasse 14"
+                        className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white transition-colors ${
+                          validationErrors.street
+                            ? "ring-2 ring-red-500 bg-red-50"
+                            : "focus:ring-blue-500"
+                        }`}
+                        required
+                      />
+                      {validationErrors.street && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {validationErrors.street}
+                        </p>
+                      )}
+                    </div>
 
                     <div className="w-full lg:w-1/2">
                       <label
@@ -750,7 +730,8 @@ const InsuranceSelectionPopup = ({
                       />
                     </div>
                   </div>
-                  {/* ID Document Upload - Full width */}
+
+                  {/* ID Document Upload */}
                   <DualIDUpload
                     formData={formData}
                     setFormData={setFormData}

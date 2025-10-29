@@ -1,4 +1,4 @@
-// services/PDFTemplateManager.ts - COMPLETE SWISS INSURANCE ADDRESS DATABASE
+// services/PDFTemplateManager.ts - FIXED OLD INSURER DISPLAY ON CANCELLATION PDF
 import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
@@ -16,7 +16,7 @@ export interface UserFormData {
   city: string;
   nationality?: string;
   ahvNumber?: string;
-  currentInsurer: string;
+  oldInsurer: string; // ✅ OLD INSURER CODE (from calculator - the one they're cancelling)
   currentInsurancePolicyNumber?: string;
   insuranceStartDate?: string;
 }
@@ -44,21 +44,126 @@ export class PDFTemplateManager {
   }
 
   /**
-   * Generate cancellation PDF matching exact template
+   * COMPLETE INSURANCE COMPANY CODE TO NAME MAPPING
+   * Maps insurance company codes to their display names
    */
-  async generateCancellationPDF(userData: UserFormData, currentInsurer: string): Promise<Buffer> {
+  private getInsurerNameByCode(code: string): string | null {
+    const insuranceMapping: Record<string, string> = {
+      "0": "None",
+      "1560": "Agrisano",
+      "1507": "AMB Assurances SA",
+      "0032": "Aquilana",
+      "1569": "Arcosana (CSS)",
+      "1542": "Assura",
+      "0312": "Atupri",
+      "0343": "Avenir (Groupe Mutuel)",
+      "1322": "Birchmeier",
+      "1575": "Compact",
+      "0290": "Concordia",
+      "0008": "CSS",
+      "0774": "Easy Sana (Groupe Mutuel)",
+      "0881": "EGK",
+      "0134": "Einsiedler",
+      "1386": "Galenos",
+      "0780": "Glarner",
+      "1562": "Helsana",
+      "1142": "Ingenbohl",
+      "1529": "Intras (CSS)",
+      "0829": "KluG",
+      "0762": "Kolping (Sympany)",
+      "0376": "KPT",
+      "0558": "KVF",
+      "0820": "Lumneziana",
+      "0360": "Luzerner Hinterland",
+      "0057": "Moove (Sympany)",
+      "1479": "Mutuel",
+      "0455": "ÖKK",
+      "1535": "Philos (Groupe Mutuel)",
+      "1998": "Prezisa",
+      "0994": "Progrès",
+      "0182": "Provita",
+      "1401": "Rhenusana",
+      "1568": "sana24",
+      "1577": "Sanagate (CSS)",
+      "0901": "Sanavals",
+      "1509": "Sanitas",
+      "0923": "SLKK",
+      "0941": "Sodalis",
+      "0246": "Steffisburg",
+      "1331": "Stoffel Mels",
+      "0194": "Sumiswalder",
+      "0062": "Supra",
+      "1384": "Swica",
+      "0509": "Sympany",
+      "1113": "Vallée d'Entremont",
+      "1555": "Visana",
+      "1040": "Visperterminen",
+      "0966": "Vita",
+      "1570": "Vivacare",
+      "1318": "Wädenswil"
+    };
+    
+    // Try direct lookup
+    if (insuranceMapping[code]) {
+      return insuranceMapping[code];
+    }
+    
+    // Try without leading zeros
+    const normalizedCode = code.replace(/^0+/, '');
+    if (insuranceMapping[normalizedCode]) {
+      return insuranceMapping[normalizedCode];
+    }
+    
+    // Try with leading zeros
+    const paddedCode = code.padStart(4, '0');
+    if (insuranceMapping[paddedCode]) {
+      return insuranceMapping[paddedCode];
+    }
+    
+    return null;
+  }
+
+  /**
+   * ✅ Generate cancellation PDF - USES OLD INSURER (the one being cancelled)
+   * @param userData - User's personal information (must contain oldInsurer CODE)
+   * @param oldInsurerCode - The insurance company CODE they are CANCELLING (from calculator)
+   */
+  async generateCancellationPDF(userData: UserFormData, oldInsurerCode: string): Promise<Buffer> {
     const startTime = Date.now();
-    console.log('Starting cancellation PDF generation with user data:', {
-      name: `${userData.firstName} ${userData.lastName}`,
-      email: userData.email,
-      currentInsurer,
-      insuranceStartDate: userData.insuranceStartDate,
-      street: userData.street,
-      address: userData.address
+    
+    console.log('🔹 === CANCELLATION PDF GENERATION START ===');
+    console.log('🔹 Input parameters:', {
+      oldInsurerCode: oldInsurerCode,
+      userDataOldInsurer: userData.oldInsurer,
+      userName: `${userData.firstName} ${userData.lastName}`
     });
+    
+    // ✅ PRIORITY 1: Use the oldInsurerCode parameter (passed explicitly)
+    // ✅ PRIORITY 2: Fall back to userData.oldInsurer if parameter is missing
+    const codeToConvert = oldInsurerCode || userData.oldInsurer;
+    
+    console.log('🔹 Code to convert:', codeToConvert);
+    
+    // ✅ Convert OLD insurer code to name for display on PDF
+    let oldInsurerName = this.getInsurerNameByCode(codeToConvert);
+    
+    console.log('🔹 Conversion result:', {
+      inputCode: codeToConvert,
+      outputName: oldInsurerName,
+      conversionSuccess: !!oldInsurerName
+    });
+    
+    // If code conversion fails, use the code itself as fallback
+    if (!oldInsurerName) {
+      console.warn('⚠️ Could not convert code to name, using code as fallback');
+      oldInsurerName = codeToConvert;
+    }
+    
+    console.log('🔹 Final OLD INSURER name for PDF:', oldInsurerName);
+    console.log('🔹 This will appear on the RIGHT SIDE of the cancellation PDF');
 
     try {
-      const pdfDoc = await this.createCancellationWithUserData(userData, currentInsurer);
+      const pdfDoc = await this.createCancellationWithUserData(userData, oldInsurerName);
       
       const pdfBytes = await pdfDoc.save({
         useObjectStreams: false,
@@ -66,6 +171,9 @@ export class PDFTemplateManager {
       });
       
       console.log(`✅ Cancellation PDF generated successfully in ${Date.now() - startTime}ms`);
+      console.log(`✅ OLD INSURER on PDF: ${oldInsurerName}`);
+      console.log('🔹 === CANCELLATION PDF GENERATION END ===');
+      
       return Buffer.from(pdfBytes);
       
     } catch (error) {
@@ -135,14 +243,15 @@ export class PDFTemplateManager {
   }
 
   /**
-   * Create cancellation PDF with proper equal left and right margins
-   * Right column displays insurance company name, street, and address
+   * ✅ Create cancellation PDF with OLD INSURER on the right side
+   * This is the insurance company the user is CANCELLING (from the calculator)
    */
   private async createCancellationWithUserData(
     userData: UserFormData, 
-    currentInsurer: string
+    oldInsurerName: string
   ): Promise<PDFDocument> {
-    console.log('Creating cancellation PDF with equal left and right margins...');
+    console.log('🔹 Creating cancellation PDF with OLD INSURER on right side...');
+    console.log('🔹 Old insurer name to display:', oldInsurerName);
     
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]); // A4 size
@@ -153,13 +262,12 @@ export class PDFTemplateManager {
     const MARGIN_LEFT = 50;
     const MARGIN_RIGHT = 50;
     const PAGE_WIDTH = 595;
-    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT; // 495
-    const COLUMN_DIVIDE = 270; // Where right column starts (from left edge)
+    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+    const COLUMN_DIVIDE = 270;
     const LINE_HEIGHT = 14;
     
-    // Calculate available width for each column with proper right margin
-    const leftColumnWidth = COLUMN_DIVIDE - MARGIN_LEFT - 10; // 210 (with 10px gap)
-    const rightColumnWidth = PAGE_WIDTH - COLUMN_DIVIDE - MARGIN_RIGHT; // 275
+    const leftColumnWidth = COLUMN_DIVIDE - MARGIN_LEFT - 10;
+    const rightColumnWidth = PAGE_WIDTH - COLUMN_DIVIDE - MARGIN_RIGHT;
     
     let currentY = 790;
 
@@ -172,7 +280,6 @@ export class PDFTemplateManager {
       color: rgb(0.5, 0.5, 0.5)
     });
 
-    // Right column header - wrap if needed
     const rightHeaderLines = this.wrapText(
       'Tragen Sie die Adresse Ihrer Krankenversicherung ein:',
       rightColumnWidth,
@@ -192,10 +299,9 @@ export class PDFTemplateManager {
 
     currentY -= 30;
 
-    // ============= LEFT COLUMN - SENDER INFO =============
+    // ============= LEFT COLUMN - SENDER INFO (USER) =============
     let leftY = currentY;
     
-    // Policy number (if available)
     if (userData.currentInsurancePolicyNumber) {
       page.drawText('Versicherten Nummer', {
         x: MARGIN_LEFT,
@@ -215,7 +321,6 @@ export class PDFTemplateManager {
       leftY -= LINE_HEIGHT;
     }
 
-    // Last name
     page.drawText('Name', {
       x: MARGIN_LEFT,
       y: leftY,
@@ -233,7 +338,6 @@ export class PDFTemplateManager {
     });
     leftY -= LINE_HEIGHT;
 
-    // First name
     page.drawText('Vorname', {
       x: MARGIN_LEFT,
       y: leftY,
@@ -251,7 +355,6 @@ export class PDFTemplateManager {
     });
     leftY -= LINE_HEIGHT;
 
-    // Street
     const streetToUse = userData.street && userData.street.trim() 
       ? userData.street 
       : userData.address;
@@ -273,7 +376,6 @@ export class PDFTemplateManager {
     });
     leftY -= LINE_HEIGHT;
 
-    // Postal code and city
     page.drawText('Postleitzahl, Wohnort', {
       x: MARGIN_LEFT,
       y: leftY,
@@ -290,10 +392,12 @@ export class PDFTemplateManager {
       color: rgb(0, 0, 0)
     });
 
-    // ============= RIGHT COLUMN - INSURANCE COMPANY INFO =============
+    // ============= RIGHT COLUMN - OLD INSURANCE COMPANY (BEING CANCELLED) =============
     let rightY = currentY;
     
-    // Insurance company name
+    console.log('🔹 === RIGHT COLUMN RENDERING ===');
+    console.log('🔹 Displaying OLD INSURER on right column:', oldInsurerName);
+    
     page.drawText('Name der Krankenversicherung', {
       x: COLUMN_DIVIDE,
       y: rightY,
@@ -303,8 +407,10 @@ export class PDFTemplateManager {
     });
     rightY -= LINE_HEIGHT;
     
-    // Wrap insurer name if too long
-    const insurerNameLines = this.wrapText(currentInsurer, rightColumnWidth, 10, font);
+    // Wrap old insurer name if too long
+    const insurerNameLines = this.wrapText(oldInsurerName, rightColumnWidth, 10, font);
+    console.log('🔹 Wrapped insurer name lines:', insurerNameLines);
+    
     for (const line of insurerNameLines) {
       page.drawText(line, {
         x: COLUMN_DIVIDE,
@@ -316,16 +422,15 @@ export class PDFTemplateManager {
       rightY -= LINE_HEIGHT;
     }
 
-    // Get insurer address from comprehensive database
-    const insurerAddress = this.getInsurerAddress(currentInsurer);
+    // ✅ Get address for OLD insurer (the one being cancelled)
+    const insurerAddress = this.getInsurerAddress(oldInsurerName);
     
-    console.log('Insurance address lookup:', {
-      insurer: currentInsurer,
+    console.log('🔹 OLD Insurance address lookup:', {
+      oldInsurer: oldInsurerName,
       found: !!insurerAddress,
       address: insurerAddress
     });
 
-    // Always display street field
     page.drawText('Strasse, Nummer', {
       x: COLUMN_DIVIDE,
       y: rightY,
@@ -335,7 +440,6 @@ export class PDFTemplateManager {
     });
     rightY -= LINE_HEIGHT;
     
-    // Display street or placeholder
     const streetText = insurerAddress?.street || '[Strasse eintragen]';
     page.drawText(streetText, {
       x: COLUMN_DIVIDE,
@@ -346,7 +450,6 @@ export class PDFTemplateManager {
     });
     rightY -= LINE_HEIGHT;
 
-    // Always display postal code and city field
     page.drawText('Postleitzahl, Ort', {
       x: COLUMN_DIVIDE,
       y: rightY,
@@ -356,7 +459,6 @@ export class PDFTemplateManager {
     });
     rightY -= LINE_HEIGHT;
     
-    // Display postal code and city or placeholder
     const postalText = insurerAddress 
       ? `${insurerAddress.postal} ${insurerAddress.city}` 
       : '[PLZ, Ort eintragen]';
@@ -369,10 +471,11 @@ export class PDFTemplateManager {
       color: insurerAddress ? rgb(0, 0, 0) : rgb(0.5, 0.5, 0.5)
     });
 
+    console.log('🔹 === RIGHT COLUMN COMPLETE ===');
+
     // ============= MAIN CONTENT SECTION =============
     currentY = Math.min(leftY, rightY) - 40;
 
-    // Date and location
     const today = new Date();
     const dateStr = today.toLocaleDateString('de-CH');
     
@@ -394,7 +497,6 @@ export class PDFTemplateManager {
 
     currentY -= 30;
 
-    // Title - wrap if needed
     const titleLine1 = 'Kundigung der obligatorischen Krankenpflegeversicherung';
     page.drawText(titleLine1, {
       x: MARGIN_LEFT,
@@ -415,7 +517,6 @@ export class PDFTemplateManager {
 
     currentY -= 25;
 
-    // Greeting
     page.drawText('Sehr geehrte Damen und Herren', {
       x: MARGIN_LEFT,
       y: currentY,
@@ -426,7 +527,6 @@ export class PDFTemplateManager {
 
     currentY -= 20;
 
-    // Calculate cancellation dates
     const insuranceStartDate = userData.insuranceStartDate || '2026-01-01';
     const startDate = new Date(insuranceStartDate);
     const cancellationDate = new Date(startDate);
@@ -439,7 +539,6 @@ export class PDFTemplateManager {
     const startMonth = startDate.getMonth() + 1;
     const startYear = startDate.getFullYear();
 
-    // Cancellation text - wrap properly to respect right margin
     const cancellationText = `Hiermit kundige ich meine Grundversicherung per ${cancellationDay}. ${cancellationMonth} ${cancellationYear}. Ich werde ab ${startDay}.${startMonth}.${startYear} bei einem anderen Krankenversicherer nach KVG versichert sein.`;
     
     const cancellationLines = this.wrapText(cancellationText, CONTENT_WIDTH, 11, font);
@@ -457,7 +556,6 @@ export class PDFTemplateManager {
 
     currentY -= 6;
 
-    // Closing text - wrap properly to respect right margin
     const closingText = 'Besten Dank fur die Ausfuhrung des Auftrages. Bitte stellen Sie mir eine entsprechende schriftliche Bestatigung zu.';
     const closingLines = this.wrapText(closingText, CONTENT_WIDTH, 11, font);
     
@@ -523,7 +621,6 @@ export class PDFTemplateManager {
 
     currentY -= 12;
     
-    // Wrap remark text to respect right margin
     const remarkText = 'Es wird empfohlen, diesen Brief per Einschreiben zu versenden';
     const remarkLines = this.wrapText(remarkText, CONTENT_WIDTH, 9, font);
     
@@ -538,14 +635,10 @@ export class PDFTemplateManager {
       currentY -= 11;
     }
 
-    console.log('✅ Cancellation PDF created with proper equal margins and right column address:', {
-      leftMargin: MARGIN_LEFT,
-      rightMargin: MARGIN_RIGHT,
-      contentWidth: CONTENT_WIDTH,
-      leftColumnWidth,
-      rightColumnWidth,
-      pageWidth: PAGE_WIDTH,
-      insurerAddressFound: !!insurerAddress
+    console.log('✅ Cancellation PDF created with OLD INSURER:', {
+      oldInsurerName: oldInsurerName,
+      insurerAddressFound: !!insurerAddress,
+      address: insurerAddress
     });
     
     return pdfDoc;
@@ -553,7 +646,6 @@ export class PDFTemplateManager {
 
   /**
    * Create application PDF - ALIGNED TEXT BELOW AUFTRAGGEBER/IN
-   * Loads template PDF and fills in user data aligned with template text
    */
   private async createApplicationWithUserData(
     userData: UserFormData,
@@ -562,7 +654,6 @@ export class PDFTemplateManager {
     console.log('Creating application PDF with aligned positioning...');
     
     try {
-      // Load the template PDF
       const templatePath = path.join(this.templateBasePath, 'Versicherungsantrag_template.pdf');
       
       console.log('Loading template from:', templatePath);
@@ -581,26 +672,19 @@ export class PDFTemplateManager {
       
       console.log('Template loaded successfully, filling in user data...');
 
-      // TOP SECTION: Fill in details right below "Auftraggeber/in"
-      const topLeftMargin = 86;
-      const topSectionStartY = 670;
+      const topLeftMargin = 62;
+      const topSectionStartY = 700;
       const lineSpacing = 14;
       
-      // Line 1: First name Last name
-      firstPage.drawText(`${userData.firstName} ${userData.lastName}`, {
+      firstPage.drawText(`${userData.salutation}`, {
         x: topLeftMargin,
         y: topSectionStartY,
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-      
-      // Line 2: Street
-      const streetText = userData.street && userData.street.trim() 
-        ? userData.street 
-        : userData.address;
-      
-      firstPage.drawText(streetText, {
+
+      firstPage.drawText(`${userData.firstName} ${userData.lastName}`, {
         x: topLeftMargin,
         y: topSectionStartY - lineSpacing,
         size: 10,
@@ -608,20 +692,30 @@ export class PDFTemplateManager {
         color: rgb(0, 0, 0)
       });
       
-      // Line 3: Postal Code + City
-      firstPage.drawText(`${userData.postalCode} ${userData.city}`, {
+      const streetText = userData.street && userData.street.trim() 
+        ? userData.street 
+        : userData.address;
+      
+      firstPage.drawText(streetText, {
         x: topLeftMargin,
         y: topSectionStartY - (lineSpacing * 2),
         size: 10,
         font,
         color: rgb(0, 0, 0)
       });
-
-      // BOTTOM SECTION: Fill in "Ort, Datum"
-      const currentDate = new Date().toLocaleDateString('de-CH');
-      const bottomLeftMargin = 125;
       
-      const ortDatumY = 274;
+      firstPage.drawText(`${userData.postalCode} ${userData.city}`, {
+        x: topLeftMargin,
+        y: topSectionStartY - (lineSpacing * 3),
+        size: 10,
+        font,
+        color: rgb(0, 0, 0)
+      });
+
+      const currentDate = new Date().toLocaleDateString('de-CH');
+      const bottomLeftMargin = 118;
+      
+      const ortDatumY = 300;
       firstPage.drawText(`${userData.address}, ${currentDate}`, {
         x: bottomLeftMargin,
         y: ortDatumY,
@@ -631,7 +725,7 @@ export class PDFTemplateManager {
       });
       
       const nameLineY = ortDatumY - lineSpacing;
-      firstPage.drawText(`${userData.firstName} ${userData.lastName}`, {
+      firstPage.drawText(` `, {
         x: bottomLeftMargin,
         y: nameLineY,
         size: 10,
@@ -659,166 +753,107 @@ export class PDFTemplateManager {
 
   /**
    * COMPLETE SWISS INSURANCE COMPANY ADDRESS DATABASE (2025)
-   * Source: Federal Office of Public Health (BAG/OFSP) - Official List
    */
   private getInsurerAddress(insurerName: string): { street: string; postal: string; city: string } | null {
-    // Normalize insurer name for better matching
     const normalizedName = insurerName.toLowerCase().trim();
     
     const addresses: Record<string, { street: string; postal: string; city: string }> = {
-      // Agrisano
       'agrisano': { street: 'Laurstrasse 10', postal: '5201', city: 'Brugg AG' },
       'agrisano krankenkasse ag': { street: 'Laurstrasse 10', postal: '5201', city: 'Brugg AG' },
-      
-      // AMB
       'amb': { street: 'Route de Verbier 13', postal: '1934', city: 'Le Châble' },
       'amb assurances sa': { street: 'Route de Verbier 13', postal: '1934', city: 'Le Châble' },
-      
-      // Aquilana
       'aquilana': { street: 'Bruggerstrasse 46', postal: '5401', city: 'Baden' },
       'aquilana versicherungen': { street: 'Bruggerstrasse 46', postal: '5401', city: 'Baden' },
-      
-      // Assura
       'assura': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
       'assura-basis sa': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
       'assura-basis ag': { street: 'Avenue C.-F. Ramuz 70', postal: '1009', city: 'Pully' },
-      
-      // Atupri
       'atupri': { street: 'Zieglerstr. 29', postal: '3001', city: 'Bern' },
       'atupri gesundheitsversicherung': { street: 'Zieglerstr. 29', postal: '3001', city: 'Bern' },
-      
-      // Avenir (Groupe Mutuel)
       'avenir': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'avenir (groupe mutuel)': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
       'avenir assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
-      
-      // Cassa da malsauns Lumneziaina
       'lumneziaina': { street: 'Postfach 22', postal: '7144', city: 'Vella' },
       'cassa da malsauns lumneziaina': { street: 'Postfach 22', postal: '7144', city: 'Vella' },
-      
-      // CM Vallée d'Entremont
       'cm de la vallée d\'entremont': { street: 'Place Centrale 5', postal: '1937', city: 'Orsières' },
+      'vallée d\'entremont': { street: 'Place Centrale 5', postal: '1937', city: 'Orsières' },
       'cmveo': { street: 'Place Centrale 5', postal: '1937', city: 'Orsières' },
-      
-      // Concordia
       'concordia': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
       'concordia schweiz': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
       'concordia kranken- und unfallversicherung ag': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
-      
-      // CSS
       'css': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
       'css kranken-versicherung ag': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
       'css versicherung ag': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
-      
-      // EGK
+      'arcosana (css)': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
+      'intras (css)': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
+      'sanagate (css)': { street: 'Postfach 2568', postal: '6002', city: 'Luzern' },
       'egk': { street: 'Birspark 1', postal: '4242', city: 'Laufen' },
       'egk grundversicherungen ag': { street: 'Birspark 1', postal: '4242', city: 'Laufen' },
-      
-      // Einsiedler
       'einsiedler': { street: 'Kronenstrasse 19', postal: '8840', city: 'Einsiedeln' },
       'einsiedler krankenkasse': { street: 'Kronenstrasse 19', postal: '8840', city: 'Einsiedeln' },
-      
-      // Galenos
       'galenos': { street: 'Militärstrasse 36', postal: '8021', city: 'Zürich' },
       'galenos ag': { street: 'Militärstrasse 36', postal: '8021', city: 'Zürich' },
-      
-      // Glarner
       'glarner': { street: 'Abläsch 8', postal: '8762', city: 'Schwanden' },
       'glarner krankenversicherung': { street: 'Abläsch 8', postal: '8762', city: 'Schwanden' },
-      
-      // Helsana
       'helsana': { street: 'Postfach', postal: '8081', city: 'Zürich' },
       'helsana versicherungen ag': { street: 'Postfach', postal: '8081', city: 'Zürich' },
-      
-      // KLuG
       'klug': { street: 'Gubelstrasse 22', postal: '6300', city: 'Zug' },
-      'klug krankenversicherung': { street: 'Gubelstrasse 22', postal: '6300', city: 'Zug' },
-      
-      // KPT
+      'krankenkasse klug': { street: 'Gubelstrasse 22', postal: '6300', city: 'Zug' },
       'kpt': { street: 'Postfach', postal: '3001', city: 'Bern' },
       'kpt krankenkasse ag': { street: 'Postfach', postal: '3001', city: 'Bern' },
       'kpt/cpt': { street: 'Postfach', postal: '3001', city: 'Bern' },
-      
-      // Krankenkasse Birchmeier
       'birchmeier': { street: 'Hauptstrasse 22', postal: '5444', city: 'Künten' },
       'krankenkasse birchmeier': { street: 'Hauptstrasse 22', postal: '5444', city: 'Künten' },
-      
-      // Krankenkasse Luzerner Hinterland
       'luzerner hinterland': { street: 'Luzernstrasse 19', postal: '6144', city: 'Zell LU' },
       'krankenkasse luzerner hinterland': { street: 'Luzernstrasse 19', postal: '6144', city: 'Zell LU' },
-      
-      // SLKK
       'slkk': { street: 'Hofwiesenstrasse 370', postal: '8050', city: 'Zürich' },
       'krankenkasse slkk': { street: 'Hofwiesenstrasse 370', postal: '8050', city: 'Zürich' },
-      
-      // Steffisburg
       'steffisburg': { street: 'Unterdorfstrasse 37', postal: '3612', city: 'Steffisburg' },
       'krankenkasse steffisburg': { street: 'Unterdorfstrasse 37', postal: '3612', city: 'Steffisburg' },
-      
-      // Visperterminen
       'visperterminen': { street: 'Dorfstrasse 66', postal: '3932', city: 'Visperterminen' },
       'krankenkasse visperterminen': { street: 'Dorfstrasse 66', postal: '3932', city: 'Visperterminen' },
-      
-      // Wädenswil
       'wädenswil': { street: 'Industriestrasse 15', postal: '8820', city: 'Wädenswil' },
       'krankenkasse wädenswil': { street: 'Industriestrasse 15', postal: '8820', city: 'Wädenswil' },
-      
-      // Mutuel (Groupe Mutuel)
       'mutuel': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
       'mutuel assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
-      
-      // Groupe Mutuel
       'groupe mutuel': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
-      
-      // ÖKK
+      'easy sana (groupe mutuel)': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
       'ökk': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
       'oekk': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
       'ökk kranken- und unfallversicherungen ag': { street: 'Bahnhofstrasse 13', postal: '7302', city: 'Landquart' },
-      
-      // Philos (Groupe Mutuel)
       'philos': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
+      'philos (groupe mutuel)': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
       'philos assurance maladie sa': { street: 'Rue des Cèdres 5', postal: '1919', city: 'Martigny' },
-      
-      // Rhenusana
       'rhenusana': { street: 'Widnauerstrasse 69', postal: '9435', city: 'Heerbrugg' },
-      
-      // Sana24 (Visana Group)
       'sana24': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
-      
-      // Sanavals
       'sanavals': { street: 'Valéstrasse 146E', postal: '7132', city: 'Vals' },
       'sanavals gesundheitskasse': { street: 'Valéstrasse 146E', postal: '7132', city: 'Vals' },
-      
-      // Sanitas
       'sanitas': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
       'sanitas grundversicherungen ag': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
       'sanitas krankenversicherung': { street: 'Jägergasse 3', postal: '8021', city: 'Zürich' },
-      
-      // Sodalis
       'sodalis': { street: 'Balfrinstr. 15', postal: '3930', city: 'Visp' },
       'sodalis gesundheitsgruppe': { street: 'Balfrinstr. 15', postal: '3930', city: 'Visp' },
-      
-      // Sumiswalder
       'sumiswalder': { street: 'Spitalstrasse 47', postal: '3454', city: 'Sumiswald' },
       'sumiswalder krankenkasse': { street: 'Spitalstrasse 47', postal: '3454', city: 'Sumiswald' },
-      
-      // SWICA
       'swica': { street: 'Römerstrasse 38', postal: '8400', city: 'Winterthur' },
       'swica krankenversicherung ag': { street: 'Römerstrasse 38', postal: '8400', city: 'Winterthur' },
-      
-      // Visana
-      'visana': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
-      'visana services ag': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
-      
-      // Vita Surselva
-      'vita surselva': { street: 'Bahnhofstrasse 33', postal: '7130', city: 'Ilanz' },
-      
-      // Vivacare (Visana Group)
-      'vivacare': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
-      
-      // Sympany
       'sympany': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
       'vivao sympany ag': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
-      'vivao': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' }
+      'vivao': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
+      'moove (sympany)': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
+      'kolping (sympany)': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' },
+      'visana': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      'visana services ag': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      'vita': { street: 'Bahnhofstrasse 33', postal: '7130', city: 'Ilanz' },
+      'vita surselva': { street: 'Bahnhofstrasse 33', postal: '7130', city: 'Ilanz' },
+      'vivacare': { street: 'Weltpoststrasse 19', postal: '3000', city: 'Bern 16' },
+      'compact': { street: 'Bundesplatz 15', postal: '6002', city: 'Luzern' },
+      'ingenbohl': { street: 'Paracelsuspark 2', postal: '6047', city: 'Kastanienbaum' },
+      'kvf': { street: 'Weingartenstrasse 38', postal: '8810', city: 'Horgen' },
+      'prezisa': { street: 'Rue St-Martin 26', postal: '1003', city: 'Lausanne' },
+      'progrès': { street: 'Rue St-Martin 26', postal: '1003', city: 'Lausanne' },
+      'provita': { street: 'Rue St-Martin 26', postal: '1003', city: 'Lausanne' },
+      'stoffel mels': { street: 'Grossfeldstrasse 79', postal: '8887', city: 'Mels' },
+      'supra': { street: 'Peter Merian-Weg 4', postal: '4002', city: 'Basel' }
     };
     
     // Try exact match first

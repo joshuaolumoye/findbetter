@@ -1,9 +1,13 @@
+// File: src/app/admin/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../../components/admin/Sidebar';
 import Dashboard from '../../../components/admin/Dashboard';
+import Analytics from '../../../components/admin/Analytics';
+import Policies from '../../../components/admin/Policies';
+import Notifications from '../../../components/admin/Notifications';
 
 interface User {
   id: number;
@@ -38,7 +42,6 @@ export default function AdminPage() {
           setAuthChecked(true);
         } else {
           console.log('Auth failed, redirecting to login');
-          // Only redirect if we're sure the auth failed
           if (response.status === 401) {
             router.replace('/admin/login');
           }
@@ -51,7 +54,6 @@ export default function AdminPage() {
       }
     };
 
-    // Add a small delay to prevent race conditions
     const timer = setTimeout(checkAuth, 100);
     return () => clearTimeout(timer);
   }, [router]);
@@ -64,15 +66,12 @@ export default function AdminPage() {
       });
       
       if (response.ok) {
-        // Clear user state
         setUser(null);
         setAuthChecked(false);
-        // Redirect to login page
         router.replace('/admin/login');
       }
     } catch (error) {
       console.error('Logout error:', error);
-      // Force redirect even if logout fails
       setUser(null);
       router.replace('/admin/login');
     }
@@ -83,13 +82,13 @@ export default function AdminPage() {
       case 'dashboard':
       case 'users':
         return <Dashboard />;
+      
+      case 'analytics':
+        return <Analytics />;
+      
       case 'policies':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Policies Management</h2>
-            <p className="text-gray-600">This section is under development</p>
-          </div>
-        );
+        return <Policies />;
+      
       case 'claims':
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -97,20 +96,10 @@ export default function AdminPage() {
             <p className="text-gray-600">This section is under development</p>
           </div>
         );
-      case 'analytics':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Analytics</h2>
-            <p className="text-gray-600">This section is under development</p>
-          </div>
-        );
+      
       case 'notifications':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Notifications</h2>
-            <p className="text-gray-600">This section is under development</p>
-          </div>
-        );
+        return <Notifications />;
+      
       case 'settings':
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -118,12 +107,12 @@ export default function AdminPage() {
             <p className="text-gray-600">This section is under development</p>
           </div>
         );
+      
       default:
         return null;
     }
   };
 
-  // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -135,7 +124,6 @@ export default function AdminPage() {
     );
   }
 
-  // Don't render anything if user is not authenticated and auth check is complete
   if (!user && authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -146,7 +134,6 @@ export default function AdminPage() {
     );
   }
 
-  // Don't render if user is null (safety check)
   if (!user) {
     return null;
   }

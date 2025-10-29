@@ -1,3 +1,4 @@
+// app/api/skribble/create-documents/route.ts - FIXED WITH OLD_INSURER
 import { NextRequest, NextResponse } from 'next/server';
 import { SkribbleService, getSkribbleConfig } from '../../../../../services/SkribbleService';
 import { getUserDetails } from '../../../../lib/db-utils';
@@ -6,7 +7,7 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  console.log('=== DOCUMENT CREATION WITH SAVED USER DATA + STREET ===');
+  console.log('=== DOCUMENT CREATION WITH OLD INSURER FIX ===');
   
   try {
     const skribbleConfig = getSkribbleConfig();
@@ -81,10 +82,15 @@ export async function POST(request: NextRequest) {
       name: `${user.first_name} ${user.last_name}`,
       address: user.address,
       street: user.street || 'not provided',
-      selectedInsurer: selectedQuote.selected_insurer
+      oldInsurer: user.old_insurer, // ✅ OLD INSURER from database
+      selectedInsurer: selectedQuote.selected_insurer // ✅ NEW INSURER from quote
     });
 
-    // STEP 2: Prepare user data for document generation - NOW WITH STREET
+    // ✅ CRITICAL FIX: Include oldInsurer field from database
+    console.log('🔹 OLD INSURER from database:', user.old_insurer);
+    console.log('🔹 NEW INSURER from quote:', selectedQuote.selected_insurer);
+
+    // STEP 2: Prepare user data for document generation - WITH OLD_INSURER
     const userData = {
       userId: userId,
       salutation: user.salutation,
@@ -94,18 +100,26 @@ export async function POST(request: NextRequest) {
       phone: user.phone,
       birthDate: user.birth_date,
       address: user.address,
-      street: user.street || '', // NEW: Include street field
+      street: user.street || '',
       postalCode: user.postal_code,
       city: user.city,
       canton: user.canton,
       nationality: user.nationality,
       ahvNumber: user.ahv_number,
-      currentInsurer: selectedQuote.search_current_insurer || 'Unknown',
+      oldInsurer: user.old_insurer || '', // ✅ OLD INSURER (being cancelled) - CODE like "1507"
+      currentInsurer: selectedQuote.selected_insurer || 'Unknown', // ✅ NEW INSURER (selected)
       currentInsurancePolicyNumber: user.current_insurance_policy_number,
       insuranceStartDate: user.insurance_start_date
     };
 
-    // Log the full address that will be used
+    // Log the critical insurance information
+    console.log('🔹 Insurance information for PDF generation:', {
+      oldInsurer: userData.oldInsurer, // Will appear on cancellation PDF (right side)
+      currentInsurer: userData.currentInsurer, // NEW insurer
+      oldInsurerType: typeof userData.oldInsurer,
+      currentInsurerType: typeof userData.currentInsurer
+    });
+
     const fullAddress = userData.street 
       ? `${userData.address} ${userData.street}`.trim()
       : userData.address;
@@ -113,7 +127,7 @@ export async function POST(request: NextRequest) {
     console.log('Full address for PDF:', fullAddress);
 
     const selectedInsurance = {
-      insurer: selectedQuote.selected_insurer,
+      insurer: selectedQuote.selected_insurer, // ✅ NEW INSURER
       tariffName: selectedQuote.selected_tariff_name,
       premium: parseFloat(selectedQuote.selected_premium) || 0,
       franchise: selectedQuote.selected_franchise,
@@ -122,6 +136,11 @@ export async function POST(request: NextRequest) {
       region: selectedQuote.selected_region,
       fiscalYear: selectedQuote.selected_fiscal_year
     };
+
+    console.log('🔹 Selected insurance (NEW insurer):', {
+      insurer: selectedInsurance.insurer,
+      premium: selectedInsurance.premium
+    });
 
     // STEP 3: Initialize Skribble service
     console.log('STEP 2: Initializing Skribble service...');
@@ -151,8 +170,9 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Skribble authentication successful');
 
-    // STEP 4: Process documents with detailed error tracking
-    console.log('STEP 3: Processing documents with full address (address + street)...');
+    // STEP 4: Process documents with OLD INSURER
+    console.log('STEP 3: Processing documents...');
+    console.log('🔹 userData.oldInsurer that will be passed to PDF:', userData.oldInsurer);
     
     let result;
     try {
@@ -253,20 +273,16 @@ export async function POST(request: NextRequest) {
       recipientData: {
         name: `${userData.firstName} ${userData.lastName}`,
         email: userData.email,
-        address: fullAddress, // Use full address with street
+        address: fullAddress,
         postalCode: userData.postalCode,
         city: userData.city,
-        currentInsurer: userData.currentInsurer,
-        newInsurer: selectedInsurance.insurer
+        oldInsurer: userData.oldInsurer, // ✅ OLD INSURER being cancelled
+        currentInsurer: userData.currentInsurer, // For reference
+        newInsurer: selectedInsurance.insurer // ✅ NEW INSURER selected
       }
     };
 
-    // STEP 6: Trigger email delivery in background (non-blocking)
-    // triggerEmailDelivery(emailDeliveryData).catch(emailError => {
-    //   console.error('⚠️ Email delivery failed (non-blocking):', emailError);
-    // });
-
-    // STEP 7: Return success response
+    // STEP 6: Return success response
     return NextResponse.json({
       success: true,
       mode: result.mode || 'simplified',
@@ -285,7 +301,7 @@ export async function POST(request: NextRequest) {
         retentionPeriod: '10 years',
         timezone: 'Europe/Zurich',
         mode: result.mode || 'simplified',
-        addressFormat: fullAddress // Include formatted address in response
+        addressFormat: fullAddress
       },
       
       documents: {
@@ -293,20 +309,21 @@ export async function POST(request: NextRequest) {
           id: result.cancellationDocumentId,
           title: `KVG Kündigung ${new Date().getFullYear()} - ${userData.firstName} ${userData.lastName}`,
           type: 'cancellation',
+          oldInsurer: userData.oldInsurer, // ✅ OLD INSURER (being cancelled)
           currentInsurer: userData.currentInsurer,
-          effectiveDate: '31.12.2024',
+          effectiveDate: '31.12.2025',
           status: 'generated',
-          address: fullAddress // Include in response
+          address: fullAddress
         },
         application: {
           id: result.applicationDocumentId,
           title: `Krankenversicherungsantrag ${selectedInsurance.insurer} - ${userData.firstName} ${userData.lastName}`,
           type: 'application',
-          newInsurer: selectedInsurance.insurer,
+          newInsurer: selectedInsurance.insurer, // ✅ NEW INSURER
           startDate: userData.insuranceStartDate,
           premium: `CHF ${selectedInsurance.premium.toFixed(2)}`,
           status: 'generated',
-          address: fullAddress // Include in response
+          address: fullAddress
         }
       },
       
@@ -360,33 +377,5 @@ export async function POST(request: NextRequest) {
       },
       { status: statusCode }
     );
-  }
-}
-
-/**
- * Trigger email delivery in background
- */
-async function triggerEmailDelivery(emailDeliveryData: any): Promise<void> {
-  try {
-    console.log('📧 Triggering email delivery for user:', emailDeliveryData.email);
-    console.log('Address on documents:', emailDeliveryData.recipientData.address);
-    
-    const deliveryResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/documents/deliver`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(emailDeliveryData)
-    });
-
-    if (deliveryResponse.ok) {
-      console.log('✅ Email delivery initiated successfully');
-    } else {
-      const errorText = await deliveryResponse.text();
-      console.error('❌ Email delivery failed:', errorText);
-    }
-  } catch (error) {
-    console.error('❌ Error triggering email delivery:', error);
-    throw error;
   }
 }
