@@ -10,6 +10,14 @@ export async function POST(request: NextRequest) {
   console.log('=== DOCUMENT CREATION WITH OLD INSURER FIX ===');
   
   try {
+    if (!request?.body) {
+      console.error('No request body provided');
+      return NextResponse.json({
+        error: 'Invalid request',
+        details: 'No request body provided',
+        code: 'INVALID_REQUEST'
+      }, { status: 400 });
+    }
     const skribbleConfig = getSkribbleConfig();
     console.log('Using configuration:', {
       environment: skribbleConfig.environment,
@@ -170,15 +178,26 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Skribble authentication successful');
 
-    // STEP 4: Process documents with OLD INSURER
+    // STEP 4: Process documents based on user status
     console.log('STEP 3: Processing documents...');
-    console.log('🔹 userData.oldInsurer that will be passed to PDF:', userData.oldInsurer);
+    // Check if user is new to Switzerland from the request body
+    const isNewToSwitzerland = body.newToSwitzerland === true;
+    
+    console.log('Document generation strategy:', {
+      isNewToSwitzerland,
+      willGenerateCancellation: !isNewToSwitzerland,
+      oldInsurer: isNewToSwitzerland ? 'N/A' : userData.oldInsurer
+    });
     
     let result;
     try {
       console.log('📄 Starting document processing with timeout...');
       result = await Promise.race([
-        skribbleService.processSwissInsuranceSwitch(userData, selectedInsurance),
+        skribbleService.processSwissInsuranceSwitch(
+          userData, 
+          selectedInsurance,
+          isNewToSwitzerland
+        ),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Processing timeout after 45 seconds')), 45000)
         )
@@ -265,7 +284,7 @@ export async function POST(request: NextRequest) {
     const emailDeliveryData = {
       userId: userId,
       email: userData.email,
-      documents: ['cancellation', 'application'],
+      documents: isNewToSwitzerland ? ['application'] : ['cancellation', 'application'],
       deliveryMethods: {
         email: true,
         postal: false

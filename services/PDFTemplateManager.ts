@@ -132,6 +132,16 @@ export class PDFTemplateManager {
     const startTime = Date.now();
     
     console.log('🔹 === CANCELLATION PDF GENERATION START ===');
+    
+    // Validate required fields
+    if (!userData.firstName || !userData.lastName) {
+      throw new Error('PDF generation failed: Missing required user name fields');
+    }
+
+    if (!oldInsurerCode && !userData.oldInsurer) {
+      throw new Error('PDF generation failed: Missing old insurer information');
+    }
+    
     console.log('🔹 Input parameters:', {
       oldInsurerCode: oldInsurerCode,
       userDataOldInsurer: userData.oldInsurer,
@@ -190,6 +200,25 @@ export class PDFTemplateManager {
     selectedInsurance: SelectedInsurance
   ): Promise<Buffer> {
     const startTime = Date.now();
+    
+    // Validate required fields
+    if (!userData.firstName || !userData.lastName) {
+      throw new Error('PDF generation failed: Missing required user name fields');
+    }
+
+    if (!userData.email || !userData.phone) {
+      throw new Error('PDF generation failed: Missing required contact information');
+    }
+
+    if (!selectedInsurance.insurer) {
+      throw new Error('PDF generation failed: Missing selected insurance information');
+    }
+
+    console.log('Starting application PDF generation with data:', {
+      userName: `${userData.firstName} ${userData.lastName}`,
+      selectedInsurer: selectedInsurance.insurer,
+      timestamp: new Date().toISOString()
+    });
     console.log('Starting application PDF generation with user data:', {
       name: `${userData.firstName} ${userData.lastName}`,
       insurer: selectedInsurance.insurer,

@@ -1,11 +1,9 @@
-// File: src/components/admin/UserDetailsEnhanced.tsx
-'use client';
-
 import { useState, useEffect } from 'react';
 import { 
   ArrowLeft, User, Mail, Phone, Calendar, MapPin, 
   FileText, DollarSign, AlertCircle, CheckCircle, 
-  Edit, Save, X as XIcon, Shield, Download, File
+  Edit, Save, X, Shield, Download, File, Image,
+  Loader, ZoomIn
 } from 'lucide-react';
 
 interface UserData {
@@ -52,59 +50,129 @@ interface UserDetailsProps {
 
 function DocumentModal({ 
   document, 
-  onClose 
+  onClose,
+  onDownload 
 }: { 
   document: UserDocument; 
   onClose: () => void;
+  onDownload: (doc: UserDocument) => void;
 }) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
-        {/* Modal Header */}
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{document.label}</h3>
-            <p className="text-sm text-gray-600">{document.name}</p>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 truncate">{document.label}</h3>
+            <p className="text-sm text-gray-600 truncate">{document.name}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+            title="Schließen"
           >
-            <XIcon className="h-6 w-6 text-gray-600" />
+            <X className="h-6 w-6 text-gray-600" />
           </button>
         </div>
 
-        {/* Modal Body */}
         <div className="flex-1 overflow-auto p-4 bg-gray-50">
           {document.type === 'pdf' ? (
             <iframe
               src={document.path}
-              className="w-full h-full min-h-[600px] border-0 rounded-lg"
+              className="w-full h-full min-h-[600px] border-0 rounded-lg bg-white"
               title={document.name}
+              onError={() => setImageError(true)}
             />
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full min-h-[500px]">
+              {!imageLoaded && !imageError && (
+                <div className="text-center">
+                  <Loader className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Bild wird geladen...</p>
+                </div>
+              )}
+              
+              {imageError && (
+                <div className="text-center text-red-600">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4" />
+                  <p className="font-medium">Fehler beim Laden des Bildes</p>
+                  <p className="text-sm text-gray-600 mt-2">Pfad: {document.path}</p>
+                  <button
+                    onClick={() => {
+                      setImageError(false);
+                      setImageLoaded(false);
+                    }}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Erneut versuchen
+                  </button>
+                </div>
+              )}
+              
               <img
                 src={document.path}
                 alt={document.name}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                className={`max-w-full max-h-full object-contain rounded-lg shadow-lg ${
+                  !imageLoaded ? 'hidden' : ''
+                }`}
+                onLoad={() => {
+                  setImageLoaded(true);
+                  setImageError(false);
+                }}
+                onError={() => {
+                  setImageError(true);
+                  setImageLoaded(false);
+                }}
               />
             </div>
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="flex items-center justify-end space-x-3 p-4 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            Schließen
-          </button>
+        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-white">
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            {document.size && (
+              <span>Größe: {formatFileSize(document.size)}</span>
+            )}
+            {document.createdAt && (
+              <span>
+                Erstellt: {new Date(document.createdAt).toLocaleDateString('de-CH')}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => onDownload(document)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              <span>Herunterladen</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Schließen
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+function formatFileSize(bytes?: number) {
+  if (!bytes) return 'N/A';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) {
@@ -155,6 +223,7 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
   const fetchUserDocuments = async (userId: number) => {
     try {
+      console.log(`Fetching documents for user ${userId}...`);
       const response = await fetch(`/api/users/${userId}/documents`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
@@ -162,12 +231,15 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Documents received:', data.documents);
         setDocuments(data.documents || []);
       } else {
         console.error('Failed to fetch documents:', response.status);
+        setDocuments([]);
       }
     } catch (err) {
       console.error('Error fetching documents:', err);
+      setDocuments([]);
     }
   };
 
@@ -202,12 +274,15 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
   const handleDownload = async (doc: UserDocument) => {
     setDownloadingDoc(doc.name);
+    setError('');
+    
     try {
-      // Direct download from public folder
+      console.log('Downloading document:', doc.path);
+      
       const response = await fetch(doc.path);
       
       if (!response.ok) {
-        throw new Error('Document not found');
+        throw new Error(`Download failed: ${response.status}`);
       }
       
       const blob = await response.blob();
@@ -217,17 +292,23 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
       a.download = doc.name;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+      
+      console.log('Download successful');
     } catch (err) {
       console.error('Download error:', err);
-      setError('Failed to download document. Please check if the file exists.');
+      setError(`Download fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
     } finally {
       setDownloadingDoc(null);
     }
   };
 
   const handleView = (doc: UserDocument) => {
+    console.log('Viewing document:', doc);
     setViewingDocument(doc);
   };
 
@@ -249,20 +330,13 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
     switch (status) {
       case 'active': return <CheckCircle className="h-4 w-4" />;
       case 'pending': return <AlertCircle className="h-4 w-4" />;
-      default: return <XIcon className="h-4 w-4" />;
+      default: return <X className="h-4 w-4" />;
     }
   };
 
   const getDocumentIcon = (doc: UserDocument) => {
     if (doc.type === 'pdf') return <FileText className="h-6 w-6 text-red-600" />;
-    return <File className="h-6 w-6 text-blue-600" />;
-  };
-
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return 'N/A';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return <Image className="h-6 w-6 text-blue-600" />;
   };
 
   if (loading && !userDetails) {
@@ -275,7 +349,7 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
           </button>
         </div>
         <div className="p-6 flex justify-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <Loader className="h-8 w-8 animate-spin text-blue-600" />
         </div>
       </div>
     );
@@ -339,7 +413,7 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
                     }}
                     className="flex items-center space-x-1 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                   >
-                    <XIcon className="h-4 w-4" />
+                    <X className="h-4 w-4" />
                     <span>Abbrechen</span>
                   </button>
                 </div>
@@ -362,7 +436,7 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
         {error && (
           <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+            <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0" />
             <span className="text-red-700">{error}</span>
             <button onClick={() => setError('')} className="ml-auto text-red-500 hover:text-red-700">×</button>
           </div>
@@ -435,23 +509,31 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
           </div>
 
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-              <FileText className="h-5 w-5 mr-2" />
-              Dokumente ({documents.length})
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                <FileText className="h-5 w-5 mr-2" />
+                Dokumente
+              </h2>
+              <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                {documents.length} {documents.length === 1 ? 'Dokument' : 'Dokumente'}
+              </span>
+            </div>
+            
             {documents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {documents.map((doc, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-3 flex-1">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
                         {getDocumentIcon(doc)}
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{doc.label}</h3>
-                          <p className="text-xs text-gray-600">{doc.name}</p>
-                          {doc.size && doc.createdAt && (
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-gray-900 truncate">{doc.label}</h3>
+                          <p className="text-xs text-gray-600 truncate">{doc.name}</p>
+                          {(doc.size || doc.createdAt) && (
                             <p className="text-xs text-gray-500 mt-1">
-                              {formatFileSize(doc.size)} • {new Date(doc.createdAt).toLocaleDateString('de-CH')}
+                              {doc.size && formatFileSize(doc.size)}
+                              {doc.size && doc.createdAt && ' • '}
+                              {doc.createdAt && new Date(doc.createdAt).toLocaleDateString('de-CH')}
                             </p>
                           )}
                         </div>
@@ -462,7 +544,7 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
                         onClick={() => handleView(doc)}
                         className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                       >
-                        <File className="h-4 w-4" />
+                        <ZoomIn className="h-4 w-4" />
                         <span className="text-sm">Ansehen</span>
                       </button>
                       <button
@@ -471,7 +553,10 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
                         className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
                       >
                         {downloadingDoc === doc.name ? (
-                          <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                          <>
+                            <Loader className="h-4 w-4 animate-spin" />
+                            <span className="text-sm">Lädt...</span>
+                          </>
                         ) : (
                           <>
                             <Download className="h-4 w-4" />
@@ -484,21 +569,21 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg bg-gray-50">
-                <File className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p className="font-medium">Keine Dokumente verfügbar</p>
-                <p className="text-sm mt-1">Es wurden noch keine Dokumente für diesen Benutzer hochgeladen.</p>
+              <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg bg-gray-50">
+                <File className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="font-medium text-lg mb-2">Keine Dokumente verfügbar</p>
+                <p className="text-sm">Es wurden noch keine Dokumente für diesen Benutzer hochgeladen.</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Document Modal */}
       {viewingDocument && (
         <DocumentModal
           document={viewingDocument}
           onClose={() => setViewingDocument(null)}
+          onDownload={handleDownload}
         />
       )}
     </>

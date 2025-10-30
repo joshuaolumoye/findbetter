@@ -1,4 +1,5 @@
 // lib/db-utils.ts - PRODUCTION MODE with STREET FIELD AND OLD_INSURER FIX
+// ✅ EMAIL UNIQUENESS REMOVED - Multiple registrations with same email allowed
 import pool from './database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
@@ -101,12 +102,14 @@ export interface DetailedUser extends RowDataPacket {
 }
 
 // ✅ PRODUCTION: Create a new user with insurance data - WITH STREET AND OLD_INSURER FIELDS
+// ✅ DUPLICATE EMAIL CHECK REMOVED - Multiple registrations allowed
 export async function createUserWithInsurance(data: UserInsuranceData): Promise<number> {
   let connection;
   
   try {
     console.log('PRODUCTION: Creating user with insurance data, street, and old_insurer fields...');
     console.log('Old Insurer from data:', data.oldInsurer);
+    console.log('Email (duplicates allowed):', data.email);
     
     // Get connection with timeout protection
     connection = await Promise.race([
@@ -124,22 +127,13 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     
     await connection.beginTransaction();
     
-    // Step 1: Check for existing user (prevent duplicates)
-    console.log('Checking for existing user:', data.email);
-    const [existingUser] = await connection.execute<RowDataPacket[]>(
-      'SELECT id FROM users WHERE email = ? LIMIT 1',
-      [data.email.toLowerCase().trim()]
-    );
+    // ✅ REMOVED: Duplicate email check - emails are no longer unique
+    // Users can now register multiple times with the same email
     
-    if (existingUser.length > 0) {
-      await connection.rollback();
-      throw new Error(`Ein Benutzer mit der E-Mail-Adresse ${data.email} existiert bereits`);
-    }
-    
-    // Step 2: Determine canton from postal code
+    // Step 1: Determine canton from postal code
     const canton = determineCantonFromPostalCode(data.postalCode);
     
-    // Step 3: Insert user with STREET and OLD_INSURER fields included
+    // Step 2: Insert user with STREET and OLD_INSURER fields included
     console.log('Inserting new user with street and old_insurer:', {
       street: data.street,
       oldInsurer: data.oldInsurer
@@ -183,7 +177,7 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     
     console.log('✅ User created with ID:', userId, 'Street:', data.street, 'Old Insurer:', data.oldInsurer);
     
-    // Step 4: Insert insurance quote with calculated savings
+    // Step 3: Insert insurance quote with calculated savings
     const annualSavings = calculateAnnualSavings(data.selectedInsurance.premium);
     
     console.log('Creating insurance quote...');
@@ -225,7 +219,7 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     
     console.log('Insurance quote created with ID:', quoteId);
     
-    // Step 5: Insert compliance data
+    // Step 4: Insert compliance data
     console.log('Creating compliance record...');
     await connection.execute(
       `INSERT INTO user_compliance (
@@ -244,7 +238,7 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
       ]
     );
     
-    // Step 6: Log admin action for audit trail
+    // Step 5: Log admin action for audit trail
     await connection.execute(
       `INSERT INTO admin_actions (
         user_id, quote_id, admin_user, action_type, action_details, created_at
@@ -273,9 +267,8 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
     }
     
     // PRODUCTION: Provide user-friendly error messages
-    if (error.message.includes('Duplicate entry') || error.message.includes('existiert bereits')) {
-      throw new Error('Ein Benutzer mit dieser E-Mail-Adresse existiert bereits');
-    } else if (error.message.includes('timeout') || error.message.includes('connection')) {
+    // ✅ REMOVED: Duplicate entry check for email
+    if (error.message.includes('timeout') || error.message.includes('connection')) {
       throw new Error('Datenbankverbindung unterbrochen. Bitte versuchen Sie es erneut.');
     } else if (error.message.includes('Data too long')) {
       throw new Error('Eingabedaten zu lang. Bitte kürzen Sie Ihre Angaben.');

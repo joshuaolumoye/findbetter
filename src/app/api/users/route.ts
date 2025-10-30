@@ -155,17 +155,17 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('User registration error:', error);
     
-    // Handle specific database errors
-    if (error.message.includes('Duplicate entry') || error.message.includes('existiert bereits')) {
-      return NextResponse.json(
-        { 
-          error: 'User already exists',
-          details: 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits',
-          code: 'USER_EXISTS'
-        },
-        { status: 409 }
-      );
-    }
+    // // Handle specific database errors
+    // if (error.message.includes('Duplicate entry') || error.message.includes('existiert bereits')) {
+    //   return NextResponse.json(
+    //     { 
+    //       error: 'User already exists',
+    //       details: 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits',
+    //       code: 'USER_EXISTS'
+    //     },
+    //     { status: 409 }
+    //   );
+    // }
     
     if (error.message.includes('timeout') || error.message.includes('connection')) {
       return NextResponse.json(

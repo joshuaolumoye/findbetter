@@ -95,60 +95,142 @@ export class SkribbleService {
   /**
    * Process Swiss insurance switch using SES (Simple Electronic Signature)
    */
-  async processSwissInsuranceSwitch(userData: any, selectedInsurance: any): Promise<any> {
+  async processSwissInsuranceSwitch(userData: any, selectedInsurance: any, isNewToSwitzerland: boolean = false): Promise<any> {
     try {
+      console.log('Processing Swiss insurance switch:', {
+        userName: `${userData.firstName} ${userData.lastName}`,
+        isNewToSwitzerland,
+        willGenerateCancellation: !isNewToSwitzerland
+      });
+      
+      // Validate user data
+      if (!userData?.firstName || !userData?.lastName) {
+        throw new Error('Invalid user data: Missing name information');
+      }
+      
+      if (!userData?.email) {
+        throw new Error('Invalid user data: Missing email');
+      }
+      
+      // Validate insurance data
+      if (!selectedInsurance?.insurer) {
+        throw new Error('Invalid insurance data: Missing insurer information');
+      }
       console.log('Starting Swiss KVG insurance process with SES (Simple Electronic Signature)...');
       
       // Validate Swiss requirements
       this.validateSwissRequirements(userData, selectedInsurance);
 
+      console.log('Document generation strategy:', {
+        isNewToSwitzerland,
+        willGenerateCancellation: !isNewToSwitzerland,
+        willGenerateApplication: true
+      });
+
       // Get access token
       const accessToken = await this.getAccessToken();
 
-      // Generate PDFs
+      // Validate and adjust data for new-to-Switzerland users
+      if (isNewToSwitzerland) {
+        console.log('Processing for new-to-Switzerland user');
+        userData = {
+          ...userData,
+          oldInsurer: '', // No previous insurer
+          insuranceStartDate: userData.insuranceStartDate || '2025-12-03' // Default start date for new residents
+        };
+      }
+
+      // Generate PDFs based on user status
       console.log('Generating KVG documents...');
       console.log('🔹 Insurance data for PDF generation:', {
-        oldInsurer: userData.oldInsurer, // OLD insurer being cancelled
+        isNewToSwitzerland,
+        oldInsurer: userData.oldInsurer || 'None', // Should be empty for new-to-Switzerland
         currentInsurer: userData.currentInsurer, // NEW insurer selected
-        selectedInsurer: selectedInsurance.insurer // NEW insurer from quote
+        selectedInsurer: selectedInsurance.insurer, // NEW insurer from quote
+        insuranceStartDate: userData.insuranceStartDate
       });
-      const [cancellationPdf, applicationPdf] = await Promise.all([
-        this.pdfManager.generateCancellationPDF(userData, userData.oldInsurer), // ✅ FIXED: Use oldInsurer for cancellation
-        this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance)
-      ]);
+
+      // Only generate application PDF for new-to-Switzerland users
+      console.log(`Generating ${isNewToSwitzerland ? 'only application PDF' : 'both PDFs'}...`);
+      const applicationPdf = await this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance);
+      let cancellationPdf = null;
+
+      // Generate cancellation PDF only for existing Swiss residents
+      if (!isNewToSwitzerland && userData.oldInsurer) {
+        cancellationPdf = await this.pdfManager.generateCancellationPDF(userData, userData.oldInsurer);
+      }
 
       console.log('PDFs generated successfully, creating Skribble SES signature requests...');
 
-      // Create BOTH signature requests with SES (WITHOUT visual signatures)
-      const signatureRequests = await this.createBothSESSignatureRequests({
-        cancellationPdf,
-        applicationPdf,
-        userData,
-        selectedInsurance,
-        accessToken
-      });
+      // Create signature requests based on user status
+      let signatureRequests;
+      
+      if (isNewToSwitzerland || !userData.oldInsurer) {
+        // For new to Switzerland or users without previous insurance
+        console.log('Creating application-only signature request...');
+        console.log('Reason:', isNewToSwitzerland ? 'New to Switzerland' : 'No previous insurance');
+        
+        const applicationRequest = await this.createSESSignatureRequest({
+          title: `Krankenversicherungsantrag - ${userData.firstName} ${userData.lastName}`,
+          message: isNewToSwitzerland 
+            ? 'Please sign your initial Swiss insurance application'
+            : 'Please sign your new insurance application',
+          content: applicationPdf.toString('base64'),
+          signerEmail: userData.email,
+          accessToken
+        });
+        
+        signatureRequests = {
+          application: applicationRequest,
+          cancellation: null
+        };
+      } else {
+        // For existing Swiss residents with previous insurance
+        console.log('Creating both signature requests for insurance switch...');
+        signatureRequests = await this.createBothSESSignatureRequests({
+          cancellationPdf,
+          applicationPdf,
+          userData,
+          selectedInsurance,
+          accessToken
+        });
+      }
 
-      console.log('Both Skribble SES signature requests created successfully');
+      console.log('Signature requests created successfully');
 
       // Generate session ID
       const sessionId = `session_${Date.now()}`;
 
-      // Return the signing URLs for both documents
-      return {
+      // Return the signing URLs based on user status
+      const response = {
         success: true,
         sessionId: sessionId,
         signatureStandard: 'SES',
-        cancellationDocumentId: signatureRequests.cancellation.requestId,
-        cancellationSigningUrl: signatureRequests.cancellation.signingUrl,
         applicationDocumentId: signatureRequests.application.requestId,
         applicationSigningUrl: signatureRequests.application.signingUrl,
-        currentInsurer: userData.currentInsurer,
-        selectedInsurer: selectedInsurance.insurer,
         userEmail: userData.email,
+        isNewToSwitzerland: isNewToSwitzerland,
+        insuranceStartDate: userData.insuranceStartDate,
+        selectedInsurer: selectedInsurance.insurer,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        instructions: 'User will receive email invitations to sign both documents. No Skribble account required.',
-        mode: 'ses'
+        mode: 'ses',
+        documentType: isNewToSwitzerland ? 'application_only' : 'full_switch',
+        instructions: isNewToSwitzerland
+          ? 'You will receive an email invitation to sign your new insurance application.'
+          : 'You will receive email invitations to sign both the cancellation and application documents.'
       };
+
+      // Only include cancellation data if it exists
+      if (signatureRequests.cancellation) {
+        return {
+          ...response,
+          cancellationDocumentId: signatureRequests.cancellation.requestId,
+          cancellationSigningUrl: signatureRequests.cancellation.signingUrl,
+          currentInsurer: userData.currentInsurer,
+        };
+      }
+
+      return response;
 
     } catch (error) {
       console.error('Error processing Swiss insurance switch with Skribble SES:', error);
@@ -160,17 +242,17 @@ export class SkribbleService {
    * Create both signature requests with SES
    */
   private async createBothSESSignatureRequests(params: {
-    cancellationPdf: Buffer;
+    cancellationPdf: Buffer | null;
     applicationPdf: Buffer;
     userData: any;
     selectedInsurance: any;
     accessToken: string;
   }): Promise<{
-    cancellation: { requestId: string; signingUrl: string };
+    cancellation: { requestId: string; signingUrl: string } | null;
     application: { requestId: string; signingUrl: string };
   }> {
     
-    console.log('Creating both SES signature requests...');
+    console.log('Creating signature requests...');
 
     try {
       // Convert PDFs to base64

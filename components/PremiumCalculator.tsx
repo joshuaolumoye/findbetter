@@ -128,8 +128,25 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
     const { id, value, type, checked } = e.target;
     let newValue = type === "checkbox" ? checked : value;
 
-    if (id === "newToSwitzerland" && !checked) {
-      setForm({ ...form, [id]: newValue, entryDate: "" });
+    if (id === "newToSwitzerland") {
+      // When checking "New to Swiss"
+      if (checked) {
+        setForm({
+          ...form,
+          [id]: checked,
+          entryDate: "",
+          // Reset and disable insurance-related fields
+          aktuelleKK: "0", // Set to "None"
+          aktuellesModell: "Standard" // Set to default
+        });
+      } else {
+        // When unchecking, just clear entry date
+        setForm({
+          ...form,
+          [id]: checked,
+          entryDate: ""
+        });
+      }
       if (validationErrors.entryDate) {
         const newErrors = { ...validationErrors };
         delete newErrors.entryDate;
@@ -177,11 +194,14 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
     if (form.unfalldeckung === "Unfalldeckung") {
       errors.unfalldeckung = "Bitte Unfalldeckung auswählen";
     }
-    if (form.aktuellesModell === "Aktuelles Modell") {
-      errors.aktuellesModell = "Bitte Modell auswählen";
-    }
-    if (form.aktuelleKK === "Aktuelle KK") {
-      errors.aktuelleKK = "Bitte Krankenkasse auswählen";
+    // Only validate insurance fields if not new to Switzerland
+    if (!form.newToSwitzerland) {
+      if (form.aktuellesModell === "Aktuelles Modell") {
+        errors.aktuellesModell = "Bitte Modell auswählen";
+      }
+      if (form.aktuelleKK === "Aktuelle KK") {
+        errors.aktuelleKK = "Bitte Krankenkasse auswählen";
+      }
     }
 
     if (form.newToSwitzerland) {
@@ -212,8 +232,8 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
 
     try {
       if (onSearchCriteria) {
-        // ✅ Convert insurance ID to name before passing to searchCriteria
-        const oldInsurerName = getInsuranceNameById(form.aktuelleKK);
+        // ✅ Only convert insurance ID to name if NOT new to Switzerland
+        const oldInsurerName = form.newToSwitzerland ? null : getInsuranceNameById(form.aktuelleKK);
         
         const criteriaToPass = {
           ...form,
@@ -221,12 +241,14 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           insuranceStartDate: form.newToSwitzerland && form.entryDate ? form.entryDate : '2026-01-01',
           comparisonDate: form.newToSwitzerland && form.entryDate ? form.entryDate : new Date().toISOString().split("T")[0],
           fullAddress: regionData ? `${regionData.name}` : form.plz,
-          aktuelleKKName: oldInsurerName, // ✅ Add the insurance name
+          aktuelleKKName: oldInsurerName, // ✅ Will be null for new-to-Switzerland users
         };
         
-        console.log("Passing search criteria with old insurer:", {
-          id: form.aktuelleKK,
-          name: oldInsurerName
+        console.log("🔹 Search criteria:", {
+          isNewToSwitzerland: form.newToSwitzerland,
+          oldInsurerId: form.aktuelleKK,
+          oldInsurerName: oldInsurerName,
+          insuranceStartDate: criteriaToPass.insuranceStartDate
         });
         
         onSearchCriteria(criteriaToPass, regionData);
@@ -248,13 +270,14 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
       };
 
       const requestBody = {
-        insurerId: form.aktuelleKK,
+        insurerId: form.newToSwitzerland ? "0" : form.aktuelleKK, // Use "0" for new Swiss residents
         regionId: regionData?.regionId,
         birthYear: parseInt(form.geburtsjahr),
         cantonId: regionData?.cantonId,
         accidentCoverage: form.unfalldeckung === "Mit Unfalldeckung",
         franchise: form.franchise,
-        tariffType: getTariffCode(form.aktuellesModell),
+        tariffType: form.newToSwitzerland ? "TAR-BASE" : getTariffCode(form.aktuellesModell),
+        isNewToSwitzerland: form.newToSwitzerland
       };
 
       const response = await fetch("/api/comparison", {
@@ -473,65 +496,69 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
           )}
         </div>
         
-        <div className="mb-6">
-          <label
-            htmlFor="aktuelleKK"
-            className="block text-sm font-medium text-gray-500 mb-2"
-          >
-            Aktuelle KVG *
-          </label>
-          <select
-            id="aktuelleKK"
-            value={form.aktuelleKK}
-            onChange={handleChange}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.aktuelleKK
-                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
-            }`}
-          >
-            {insuranceCompanies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
-          {validationErrors.aktuelleKK && (
-            <p className="mt-1 text-sm text-red-600">
-              {validationErrors.aktuelleKK}
-            </p>
-          )}
-        </div>
+        {!form.newToSwitzerland && (
+          <>
+            <div className="mb-6">
+              <label
+                htmlFor="aktuelleKK"
+                className="block text-sm font-medium text-gray-500 mb-2"
+              >
+                Aktuelle KVG *
+              </label>
+              <select
+                id="aktuelleKK"
+                value={form.aktuelleKK}
+                onChange={handleChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+                  validationErrors.aktuelleKK
+                    ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                    : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
+                }`}
+              >
+                {insuranceCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              {validationErrors.aktuelleKK && (
+                <p className="mt-1 text-sm text-red-600">
+                  {validationErrors.aktuelleKK}
+                </p>
+              )}
+            </div>
 
-        <div className="mb-4">
-          <label
-            htmlFor="aktuellesModell"
-            className="block text-sm font-medium text-gray-500 mb-2"
-          >
-            Arzt Modell *
-          </label>
-          <select
-            id="aktuellesModell"
-            value={form.aktuellesModell}
-            onChange={handleChange}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
-              validationErrors.aktuellesModell
-                ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
-                : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
-            }`}
-          >
-            <option value="Aktuelles Modell">Modell auswählen</option>
-            <option value="Standard">Standard (freie Arztwahl)</option>
-            <option value="HMO">HMO (Gesundheitszentrum)</option>
-            <option value="Hausarzt">Hausarzt (Hausarztmodell)</option>
-            <option value="Telmed">Telmed (Telemedizin)</option>
-          </select>
-          {validationErrors.aktuellesModell && (
-            <p className="mt-1 text-sm text-red-600">
-              {validationErrors.aktuellesModell}
-            </p>
-          )}
-        </div>
+            <div className="mb-4">
+              <label
+                htmlFor="aktuellesModell"
+                className="block text-sm font-medium text-gray-500 mb-2"
+              >
+                Arzt Modell *
+              </label>
+              <select
+                id="aktuellesModell"
+                value={form.aktuellesModell}
+                onChange={handleChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 transition ${
+                  validationErrors.aktuellesModell
+                    ? "border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500"
+                    : "border-gray-200 bg-gray-50 text-gray-500 focus:ring-blue-500 focus:border-blue-500"
+                }`}
+              >
+                <option value="Aktuelles Modell">Modell auswählen</option>
+                <option value="Standard">Standard (freie Arztwahl)</option>
+                <option value="HMO">HMO (Gesundheitszentrum)</option>
+                <option value="Hausarzt">Hausarzt (Hausarztmodell)</option>
+                <option value="Telmed">Telmed (Telemedizin)</option>
+              </select>
+              {validationErrors.aktuellesModell && (
+                <p className="mt-1 text-sm text-red-600">
+                  {validationErrors.aktuellesModell}
+                </p>
+              )}
+            </div>
+          </>
+        )}
 
         <div className="mb-4 flex items-center space-x-2">
           <input

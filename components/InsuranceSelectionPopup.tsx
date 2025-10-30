@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useEffect, useState } from "react";
 import {
@@ -54,6 +53,31 @@ const InsuranceSelectionPopup = ({
   const [submitError, setSubmitError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
   const [currentStep, setCurrentStep] = useState("form");
+  const [documents, setDocuments] = useState([]);
+  const [documentError, setDocumentError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  // Function to handle document download
+  const handleDownload = async (document) => {
+    try {
+      setDownloading(true);
+      const response = await fetch(document.path);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = document.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      setDocumentError('Failed to download document. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     const updates = {};
@@ -70,16 +94,18 @@ const InsuranceSelectionPopup = ({
         selectedInsurance.insurerName || selectedInsurance.Insurer;
     }
 
-    // ✅ Keep oldInsurer from searchCriteria
-    if (searchCriteria?.aktuelleKK && searchCriteria.aktuelleKK !== "Aktuelle KK") {
-      updates.oldInsurer = searchCriteria.aktuelleKK;
+    // ✅ Keep oldInsurer from searchCriteria (only if NOT new to Switzerland)
+    if (!searchCriteria?.newToSwitzerland && searchCriteria?.aktuelleKKName) {
+      updates.oldInsurer = searchCriteria.aktuelleKKName;
+    } else if (searchCriteria?.newToSwitzerland) {
+      updates.oldInsurer = ""; // Clear for new-to-Switzerland users
     }
 
     setFormData((prev) => ({ ...prev, ...updates }));
   }, [
     searchCriteria?.newToSwitzerland,
     searchCriteria?.entryDate,
-    searchCriteria?.aktuelleKK,
+    searchCriteria?.aktuelleKKName,
     selectedInsurance?.insurerName,
     selectedInsurance?.Insurer,
   ]);
@@ -192,9 +218,15 @@ const InsuranceSelectionPopup = ({
         searchCriteria?.plz || extractPostalCode(formData.address, "8001");
       const city = extractCity(formData.address) || formData.street;
 
-      console.log("STEP 1: Saving user to database...");
-      console.log("Old Insurer (aktuelleKK):", formData.oldInsurer);
-      console.log("New Insurer (selected):", formData.currentInsurer);
+      // ✅ Determine if user is new to Switzerland
+      const isNewToSwitzerland = searchCriteria?.newToSwitzerland === true;
+
+      console.log('🔹 User submission details:', {
+        isNewToSwitzerland,
+        oldInsurer: isNewToSwitzerland ? null : formData.oldInsurer,
+        newInsurer: formData.currentInsurer,
+        insuranceStartDate: formData.insuranceStartDate
+      });
 
       const userPayload = {
         salutation: formData.salutation,
@@ -208,13 +240,13 @@ const InsuranceSelectionPopup = ({
         postalCode: postalCode,
         city: city || formData.street.trim(),
         nationality: formData.nationality.trim() || "swiss",
-        ahvNumber: searchCriteria?.newToSwitzerland
+        ahvNumber: isNewToSwitzerland
           ? null
           : formData.ahvNumber.trim() || null,
-        oldInsurer: formData.oldInsurer || searchCriteria?.aktuelleKK || null, // ✅ OLD INSURER
+        oldInsurer: isNewToSwitzerland ? "" : (formData.oldInsurer || ""), // ✅ Empty for new-to-Switzerland
         currentInsurancePolicyNumber:
           formData.currentPolicyNumber.trim() || null,
-        insuranceStartDate: formData.insuranceStartDate || "01.01.2026",
+        insuranceStartDate: formData.insuranceStartDate,
         interestedInConsultation: formData.consultationInterest,
 
         searchCriteria: {
@@ -225,8 +257,8 @@ const InsuranceSelectionPopup = ({
             searchCriteria?.unfalldeckung || "Mit Unfalldeckung",
           currentModel: searchCriteria?.aktuellesModell || "Standard",
           currentInsurer: formData.currentInsurer, // ✅ NEW INSURER
-          oldInsurer: formData.oldInsurer, // ✅ OLD INSURER
-          newToSwitzerland: searchCriteria?.newToSwitzerland || false,
+          oldInsurer: isNewToSwitzerland ? "" : formData.oldInsurer, // ✅ Empty for new-to-Switzerland
+          newToSwitzerland: isNewToSwitzerland,
         },
 
         selectedInsurance: {
@@ -259,14 +291,15 @@ const InsuranceSelectionPopup = ({
 
         compliance: {
           informationArt45: formData.informationArt45,
-          agbAccepted: true, // Set to true by default
+          agbAccepted: true,
           mandateAccepted: formData.mandateAccepted,
           terminationAuthority: formData.terminationAuthority,
           consultationInterest: formData.consultationInterest,
         },
       };
 
-      console.log("Payload with old and new insurer:", {
+      console.log("✅ Payload prepared:", {
+        isNewToSwitzerland,
         oldInsurer: userPayload.oldInsurer,
         currentInsurer: userPayload.searchCriteria.currentInsurer,
         selectedInsurer: userPayload.selectedInsurance.insurer,
@@ -326,7 +359,15 @@ const InsuranceSelectionPopup = ({
         selectedInsurance: userPayload.selectedInsurance,
         searchCriteria: userPayload.searchCriteria,
         compliance: userPayload.compliance,
+        newToSwitzerland: isNewToSwitzerland, // ✅ Pass the flag
       };
+
+      console.log("📄 Skribble payload:", {
+        userId,
+        isNewToSwitzerland,
+        oldInsurer: userPayload.oldInsurer,
+        hasOldInsurer: !!userPayload.oldInsurer
+      });
 
       const skribbleResponse = await fetch("/api/skribble/create-documents", {
         method: "POST",
@@ -389,7 +430,7 @@ const InsuranceSelectionPopup = ({
         street: "",
         nationality: "",
         ahvNumber: "",
-        oldInsurer: searchCriteria?.aktuelleKK || "",
+        oldInsurer: searchCriteria?.aktuelleKKName || "",
         currentInsurer: "",
         currentPolicyNumber: "",
         insuranceStartDate: "",
@@ -414,6 +455,38 @@ const InsuranceSelectionPopup = ({
 
   const isNewToSwitzerland = searchCriteria?.newToSwitzerland === true;
 
+  const DocumentsList = ({ documents }) => {
+    if (!documents || documents.length === 0) return null;
+    
+    return (
+      <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-4">Generated Documents</h3>
+        <div className="space-y-3">
+          {documents.map((doc, index) => (
+            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-center space-x-3">
+                <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-sm font-medium text-gray-700">{doc.label || doc.name}</span>
+              </div>
+              <button
+                onClick={() => handleDownload(doc)}
+                disabled={downloading}
+                className="px-3 py-1 text-sm bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloading ? 'Downloading...' : 'Download'}
+              </button>
+            </div>
+          ))}
+        </div>
+        {documentError && (
+          <p className="mt-2 text-sm text-red-600">{documentError}</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative">
@@ -430,11 +503,12 @@ const InsuranceSelectionPopup = ({
             <div className="text-center py-12">
               <div className="animate-spin w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto mb-4"></div>
               <h3 className="text-2xl font-bold text-gray-800 mb-4">
-                Benutzer wird registriert...
+                {isNewToSwitzerland ? "Antrag wird erstellt..." : "Benutzer wird registriert..."}
               </h3>
               <p className="text-gray-600 mb-2">
-                Ihre Daten werden gespeichert und die Dokumente werden
-                vorbereitet...
+                {isNewToSwitzerland 
+                  ? "Ihr Versicherungsantrag wird vorbereitet..."
+                  : "Ihre Daten werden gespeichert und die Dokumente werden vorbereitet..."}
               </p>
               <p className="text-sm text-blue-600">
                 Sie werden automatisch weitergeleitet.
@@ -481,8 +555,7 @@ const InsuranceSelectionPopup = ({
                 {isNewToSwitzerland && (
                   <div className="mt-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 inline-flex items-center">
                     <AlertCircle className="w-4 h-4 mr-2" />
-                    Neu in der Schweiz - Versicherungsbeginn basiert auf
-                    Einreisedatum
+                    Neu in der Schweiz - Nur Antragsformular erforderlich
                   </div>
                 )}
               </div>

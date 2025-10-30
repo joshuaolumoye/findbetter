@@ -1,9 +1,9 @@
-// File: src/app/api/users/[id]/documents/route.ts
-
+// File: app/api/users/[id]/documents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
-import { getCurrentSession } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 interface UserDocument {
   type: 'pdf' | 'image';
@@ -20,124 +20,111 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Verify admin session
-    const admin = await getCurrentSession();
-    if (!admin) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const userId = params.id;
+    console.log(`📄 Fetching documents for user ${userId}`);
+
     const documents: UserDocument[] = [];
 
-    // Define document paths to check
-    const userDocPath = path.join(process.cwd(), 'public', userId);
-    const idDocPath = path.join(process.cwd(), 'public', 'uploads', 'id-documents', userId);
-
-    console.log('Checking paths:');
-    console.log('- User docs:', userDocPath);
-    console.log('- ID docs:', idDocPath);
-
-    // Check for generated PDFs (application and cancellation forms)
+    // Check ID documents directory
+    const idDocsDir = path.join(process.cwd(), 'public', 'uploads', 'id-documents', userId);
+    
     try {
-      const docFiles = await readdir(userDocPath);
-      console.log('Found user docs:', docFiles);
-      
-      for (const file of docFiles) {
-        const filePath = path.join(userDocPath, file);
-        const fileStat = await stat(filePath);
+      const files = await readdir(idDocsDir);
+      console.log(`Found ${files.length} files in ID documents directory`);
+
+      for (const file of files) {
+        const filePath = path.join(idDocsDir, file);
+        const fileStats = await stat(filePath);
         
-        if (fileStat.isFile()) {
-          let category: UserDocument['category'];
-          let label: string;
-          
-          // More flexible matching for document names
-          const lowerFile = file.toLowerCase();
-          
-          if (lowerFile.includes('application') || lowerFile.includes('anmelde')) {
-            category = 'application';
-            label = 'Anmeldeformular (Application Form)';
-          } else if (lowerFile.includes('cancellation') || lowerFile.includes('kündigung')) {
-            category = 'cancellation';
-            label = 'Kündigungsschreiben (Cancellation Letter)';
-          } else {
-            // Include any PDF found in user folder
-            if (file.endsWith('.pdf')) {
-              category = 'application';
-              label = file.replace('.pdf', '');
-            } else {
-              continue;
-            }
-          }
-          
-          documents.push({
-            type: file.endsWith('.pdf') ? 'pdf' : 'image',
-            name: file,
-            path: `/${userId}/${file}`,
-            category,
-            label,
-            size: fileStat.size,
-            createdAt: fileStat.birthtime.toISOString()
-          });
+        // Determine file type
+        const ext = path.extname(file).toLowerCase();
+        const type = ext === '.pdf' ? 'pdf' : 'image';
+        
+        // Determine category and label
+        let category: UserDocument['category'];
+        let label: string;
+        
+        if (file.includes('id_front')) {
+          category = 'id_front';
+          label = 'Ausweis Vorderseite';
+        } else if (file.includes('id_back')) {
+          category = 'id_back';
+          label = 'Ausweis Rückseite';
+        } else if (file.includes('id_combined')) {
+          category = 'id_combined';
+          label = 'Ausweis Kombiniert (PDF)';
+        } else if (file.includes('application')) {
+          category = 'application';
+          label = 'Versicherungsantrag';
+        } else if (file.includes('cancellation')) {
+          category = 'cancellation';
+          label = 'Kündigungsschreiben';
+        } else {
+          continue; // Skip unknown files
         }
+
+        documents.push({
+          type,
+          name: file,
+          path: `/uploads/id-documents/${userId}/${file}`,
+          category,
+          label,
+          size: fileStats.size,
+          createdAt: fileStats.birthtime.toISOString()
+        });
       }
-    } catch (error: any) {
-      console.log(`No documents found in ${userDocPath}`, error.message);
+
+      // Sort documents: combined first, then front, then back, then others
+      documents.sort((a, b) => {
+        const order = { id_combined: 0, id_front: 1, id_back: 2, application: 3, cancellation: 4 };
+        return order[a.category] - order[b.category];
+      });
+
+    } catch (error) {
+      console.log(`No ID documents directory found for user ${userId}`);
     }
 
-    // Check for ID card uploads
+    // Check generated documents directory
+    const generatedDocsDir = path.join(process.cwd(), 'public', 'uploads', 'generated-documents');
+    
     try {
-      const idFiles = await readdir(idDocPath);
-      console.log('Found ID docs:', idFiles);
+      const files = await readdir(generatedDocsDir);
       
-      for (const file of idFiles) {
-        const filePath = path.join(idDocPath, file);
-        const fileStat = await stat(filePath);
-        
-        if (fileStat.isFile()) {
+      for (const file of files) {
+        // Only include files that contain the user ID
+        if (file.includes(userId) || file.includes(`user_${userId}`)) {
+          const filePath = path.join(generatedDocsDir, file);
+          const fileStats = await stat(filePath);
+          
           let category: UserDocument['category'];
           let label: string;
           
-          const lowerFile = file.toLowerCase();
-          
-          if (lowerFile.includes('front') || lowerFile.includes('vorder')) {
-            category = 'id_front';
-            label = 'ID Karte (Vorderseite)';
-          } else if (lowerFile.includes('back') || lowerFile.includes('rück')) {
-            category = 'id_back';
-            label = 'ID Karte (Rückseite)';
-          } else if (lowerFile.includes('combined') || lowerFile.includes('komplett')) {
-            category = 'id_combined';
-            label = 'ID Karte (Kombiniert)';
+          if (file.includes('application')) {
+            category = 'application';
+            label = 'Versicherungsantrag (Generiert)';
+          } else if (file.includes('cancellation')) {
+            category = 'cancellation';
+            label = 'Kündigungsschreiben (Generiert)';
           } else {
             continue;
           }
-          
-          const ext = path.extname(file).toLowerCase();
+
           documents.push({
-            type: ext === '.pdf' ? 'pdf' : 'image',
+            type: 'pdf',
             name: file,
-            path: `/uploads/id-documents/${userId}/${file}`,
+            path: `/uploads/generated-documents/${file}`,
             category,
             label,
-            size: fileStat.size,
-            createdAt: fileStat.birthtime.toISOString()
+            size: fileStats.size,
+            createdAt: fileStats.birthtime.toISOString()
           });
         }
       }
-    } catch (error: any) {
-      console.log(`No ID documents found in ${idDocPath}`, error.message);
+    } catch (error) {
+      console.log('No generated documents directory found');
     }
 
-    // Sort documents by creation date (newest first)
-    documents.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    console.log(`Total documents found: ${documents.length}`);
-    console.log('Documents:', documents.map(d => ({ name: d.name, path: d.path })));
+    console.log(`✅ Found ${documents.length} documents for user ${userId}`);
 
     return NextResponse.json({
       success: true,
@@ -145,10 +132,80 @@ export async function GET(
       count: documents.length
     });
 
-  } catch (error: any) {
-    console.error('Error fetching user documents:', error);
+  } catch (error) {
+    console.error('❌ Error fetching user documents:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch documents', details: error.message },
+      { 
+        error: 'Failed to fetch documents',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        documents: []
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Download endpoint
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { filePath } = await request.json();
+    
+    if (!filePath) {
+      return NextResponse.json(
+        { error: 'File path is required' },
+        { status: 400 }
+      );
+    }
+
+    // Security: Ensure the path is within allowed directories
+    const allowedDirs = ['id-documents', 'generated-documents', 'user-files'];
+    const isAllowed = allowedDirs.some(dir => filePath.includes(dir));
+    
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: 'Access denied' },
+        { status: 403 }
+      );
+    }
+
+    const fullPath = path.join(process.cwd(), 'public', filePath);
+    
+    // Check if file exists
+    try {
+      await stat(fullPath);
+    } catch {
+      return NextResponse.json(
+        { error: 'File not found' },
+        { status: 404 }
+      );
+    }
+
+    const { readFile } = await import('fs/promises');
+    const fileBuffer = await readFile(fullPath);
+    
+    const filename = path.basename(filePath);
+    const ext = path.extname(filename).toLowerCase();
+    
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+
+    return new NextResponse(fileBuffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': fileBuffer.length.toString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Download error:', error);
+    return NextResponse.json(
+      { error: 'Download failed' },
       { status: 500 }
     );
   }
