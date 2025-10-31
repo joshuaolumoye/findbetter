@@ -24,9 +24,13 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const filter = searchParams.get('filter') || 'all';
-    const type = searchParams.get('type') || 'all';
-    const limit = parseInt(searchParams.get('limit') || '50');
+  const filter = searchParams.get('filter') || 'all';
+  const type = searchParams.get('type') || 'all';
+  let limit = parseInt(searchParams.get('limit') || '50');
+  if (!Number.isFinite(limit) || isNaN(limit) || limit <= 0) limit = 50;
+  // clamp limit to reasonable size to avoid abuse
+  const MAX_LIMIT = 1000;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
 
     // Get connection with timeout
     connection = await Promise.race([
@@ -53,12 +57,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (type !== 'all') {
-      query += ' AND type = ?';
-      params.push(type);
+      // basic validation to avoid accidental SQL injection (type should be short)
+      const safeType = String(type).trim().slice(0, 100);
+      query += ' AND `type` = ?';
+      params.push(safeType);
     }
 
-    query += ' ORDER BY created_at DESC LIMIT ?';
-    params.push(limit);
+    // Some MySQL configurations and drivers don't accept binding LIMIT as a prepared parameter.
+    // Append LIMIT directly using the validated numeric value to avoid "Incorrect arguments to mysqld_stmt_execute".
+    query += ` ORDER BY created_at DESC LIMIT ${limit}`;
 
     const [notifications] = await connection.execute<RowDataPacket[]>(query, params);
 
@@ -84,11 +91,19 @@ export async function GET(request: NextRequest) {
     console.error('❌ Error fetching notifications:', error);
     
     // Provide detailed error for debugging
-    const errorDetails = {
+    const errorDetails: any = {
       message: error.message,
       code: error.code,
       sqlMessage: error.sqlMessage
     };
+
+    // Include query and params when available (helps debug on VPS)
+    try {
+      if (typeof query !== 'undefined') errorDetails.query = query;
+      if (typeof params !== 'undefined') errorDetails.params = params;
+    } catch (e) {
+      // ignore
+    }
 
     return NextResponse.json(
       { 
