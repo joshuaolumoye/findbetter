@@ -34,8 +34,9 @@ export async function POST(request: NextRequest) {
       const frontFilename = `${userId}_${timestamp}_front_${frontFile.name}`;
       const frontFilepath = join(uploadDir, frontFilename);
       
-      await writeFile(frontFilepath, frontBuffer);
-      uploadedFiles.front = `/uploads/documents/${userId}/${frontFilename}`;
+  await writeFile(frontFilepath, frontBuffer);
+  // Store relative path without leading slash to be consistent with document listing API
+  uploadedFiles.front = `uploads/documents/${userId}/${frontFilename}`;
       
       console.log(`✅ Front uploaded: ${frontFilename} (${frontBuffer.length} bytes)`);
     }
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
       const backFilename = `${userId}_${timestamp}_back_${backFile.name}`;
       const backFilepath = join(uploadDir, backFilename);
       
-      await writeFile(backFilepath, backBuffer);
-      uploadedFiles.back = `/uploads/documents/${userId}/${backFilename}`;
+  await writeFile(backFilepath, backBuffer);
+  uploadedFiles.back = `uploads/documents/${userId}/${backFilename}`;
       
       console.log(`✅ Back uploaded: ${backFilename} (${backBuffer.length} bytes)`);
     }

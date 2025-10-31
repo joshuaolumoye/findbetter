@@ -1,18 +1,42 @@
-// File: app/api/users/[id]/documents/route.ts
+// app/api/users/[id]/documents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { readdir, stat } from 'fs/promises';
+import { readdir, stat, readFile } from 'fs/promises';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
 interface UserDocument {
-  type: 'pdf' | 'image';
+  type: 'pdf' | 'image' | 'doc';
   name: string;
   path: string;
-  category: 'application' | 'cancellation' | 'id_front' | 'id_back' | 'id_combined';
+  category: 'application' | 'cancellation' | 'id_front' | 'id_back' | 'id_combined' | 'other';
   label: string;
   size: number;
   createdAt: string;
+  mimeType: string;
+}
+
+function getDocumentType(filename: string): 'pdf' | 'image' | 'doc' {
+  const ext = filename.toLowerCase().split('.').pop();
+  if (ext === 'pdf') return 'pdf';
+  if (['doc', 'docx'].includes(ext || '')) return 'doc';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext || '')) return 'image';
+  return 'doc';
+}
+
+function getMimeType(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop();
+  const mimeTypes: Record<string, string> = {
+    'pdf': 'application/pdf',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  };
+  return mimeTypes[ext || ''] || 'application/octet-stream';
 }
 
 export async function GET(
@@ -33,50 +57,53 @@ export async function GET(
       console.log(`Found ${files.length} files in ID documents directory`);
 
       for (const file of files) {
-        const filePath = path.join(idDocsDir, file);
-        const fileStats = await stat(filePath);
-        
-        // Determine file type
-        const ext = path.extname(file).toLowerCase();
-        const type = ext === '.pdf' ? 'pdf' : 'image';
-        
-        // Determine category and label
-        let category: UserDocument['category'];
-        let label: string;
-        
-        if (file.includes('id_front')) {
-          category = 'id_front';
-          label = 'Ausweis Vorderseite';
-        } else if (file.includes('id_back')) {
-          category = 'id_back';
-          label = 'Ausweis Rückseite';
-        } else if (file.includes('id_combined')) {
-          category = 'id_combined';
-          label = 'Ausweis Kombiniert (PDF)';
-        } else if (file.includes('application')) {
-          category = 'application';
-          label = 'Versicherungsantrag';
-        } else if (file.includes('cancellation')) {
-          category = 'cancellation';
-          label = 'Kündigungsschreiben';
-        } else {
-          continue; // Skip unknown files
-        }
+        try {
+          const filePath = path.join(idDocsDir, file);
+          const fileStats = await stat(filePath);
+          
+          const type = getDocumentType(file);
+          
+          let category: UserDocument['category'];
+          let label: string;
+          
+          if (file.includes('id_front')) {
+            category = 'id_front';
+            label = 'Ausweis Vorderseite';
+          } else if (file.includes('id_back')) {
+            category = 'id_back';
+            label = 'Ausweis Rückseite';
+          } else if (file.includes('id_combined')) {
+            category = 'id_combined';
+            label = 'Ausweis Kombiniert';
+          } else if (file.includes('application')) {
+            category = 'application';
+            label = 'Versicherungsantrag';
+          } else if (file.includes('cancellation')) {
+            category = 'cancellation';
+            label = 'Kündigungsschreiben';
+          } else {
+            category = 'other';
+            label = file;
+          }
 
-        documents.push({
-          type,
-          name: file,
-          path: `/uploads/id-documents/${userId}/${file}`,
-          category,
-          label,
-          size: fileStats.size,
-          createdAt: fileStats.birthtime.toISOString()
-        });
+          documents.push({
+            type,
+            name: file,
+            // Return relative path (no leading slash) so server-side joining works reliably
+            path: `uploads/id-documents/${userId}/${file}`,
+            category,
+            label,
+            size: fileStats.size,
+            createdAt: fileStats.birthtime.toISOString(),
+            mimeType: getMimeType(file)
+          });
+        } catch (fileError) {
+          console.warn(`Error processing file ${file}:`, fileError);
+        }
       }
 
-      // Sort documents: combined first, then front, then back, then others
       documents.sort((a, b) => {
-        const order = { id_combined: 0, id_front: 1, id_back: 2, application: 3, cancellation: 4 };
+        const order = { id_combined: 0, id_front: 1, id_back: 2, application: 3, cancellation: 4, other: 5 };
         return order[a.category] - order[b.category];
       });
 
@@ -91,33 +118,38 @@ export async function GET(
       const files = await readdir(generatedDocsDir);
       
       for (const file of files) {
-        // Only include files that contain the user ID
         if (file.includes(userId) || file.includes(`user_${userId}`)) {
-          const filePath = path.join(generatedDocsDir, file);
-          const fileStats = await stat(filePath);
-          
-          let category: UserDocument['category'];
-          let label: string;
-          
-          if (file.includes('application')) {
-            category = 'application';
-            label = 'Versicherungsantrag (Generiert)';
-          } else if (file.includes('cancellation')) {
-            category = 'cancellation';
-            label = 'Kündigungsschreiben (Generiert)';
-          } else {
-            continue;
-          }
+          try {
+            const filePath = path.join(generatedDocsDir, file);
+            const fileStats = await stat(filePath);
+            
+            let category: UserDocument['category'];
+            let label: string;
+            
+            if (file.includes('application')) {
+              category = 'application';
+              label = 'Versicherungsantrag (Generiert)';
+            } else if (file.includes('cancellation')) {
+              category = 'cancellation';
+              label = 'Kündigungsschreiben (Generiert)';
+            } else {
+              continue;
+            }
 
-          documents.push({
-            type: 'pdf',
-            name: file,
-            path: `/uploads/generated-documents/${file}`,
-            category,
-            label,
-            size: fileStats.size,
-            createdAt: fileStats.birthtime.toISOString()
-          });
+            documents.push({
+              type: 'pdf',
+              name: file,
+              // Return relative path (no leading slash)
+              path: `uploads/generated-documents/${file}`,
+              category,
+              label,
+              size: fileStats.size,
+              createdAt: fileStats.birthtime.toISOString(),
+              mimeType: 'application/pdf'
+            });
+          } catch (fileError) {
+            console.warn(`Error processing generated document ${file}:`, fileError);
+          }
         }
       }
     } catch (error) {
@@ -152,7 +184,7 @@ export async function POST(
 ) {
   try {
     const { filePath } = await request.json();
-    
+
     if (!filePath) {
       return NextResponse.json(
         { error: 'File path is required' },
@@ -160,10 +192,18 @@ export async function POST(
       );
     }
 
-    // Security: Ensure the path is within allowed directories
+    // Normalize and sanitize incoming path: strip leading slashes and block path traversal
+    const normalizedPath = String(filePath).replace(/^\/+/, '');
+    if (normalizedPath.includes('..')) {
+      return NextResponse.json(
+        { error: 'Invalid file path' },
+        { status: 400 }
+      );
+    }
+
     const allowedDirs = ['id-documents', 'generated-documents', 'user-files'];
-    const isAllowed = allowedDirs.some(dir => filePath.includes(dir));
-    
+    const isAllowed = allowedDirs.some(dir => normalizedPath.includes(dir));
+
     if (!isAllowed) {
       return NextResponse.json(
         { error: 'Access denied' },
@@ -171,9 +211,8 @@ export async function POST(
       );
     }
 
-    const fullPath = path.join(process.cwd(), 'public', filePath);
+    const fullPath = path.join(process.cwd(), 'public', normalizedPath);
     
-    // Check if file exists
     try {
       await stat(fullPath);
     } catch {
@@ -183,16 +222,9 @@ export async function POST(
       );
     }
 
-    const { readFile } = await import('fs/promises');
     const fileBuffer = await readFile(fullPath);
-    
-    const filename = path.basename(filePath);
-    const ext = path.extname(filename).toLowerCase();
-    
-    let contentType = 'application/octet-stream';
-    if (ext === '.pdf') contentType = 'application/pdf';
-    else if (ext === '.png') contentType = 'image/png';
-    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+  const filename = path.basename(normalizedPath);
+    const contentType = getMimeType(filename);
 
     return new NextResponse(fileBuffer, {
       headers: {

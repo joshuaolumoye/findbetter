@@ -140,15 +140,19 @@ export default function UserDetails({ user, onBack }: UserDetailsProps) {
     }
   };
 
-  // Download document
+  // Download document via POST /api/users/[id]/documents (server returns file buffer)
   const handleDownload = async (doc: UserDocument) => {
     setDownloadingDoc(doc.name);
     try {
-      const response = await fetch(`/api/users/${user.id}/documents/download?path=${encodeURIComponent(doc.path)}`);
-      
-      if (!response.ok) throw new Error('Download failed');
-      
-      const blob = await response.blob();
+      const res = await fetch(`/api/users/${user.id}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: doc.path })
+      });
+
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+
+      const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -165,9 +169,10 @@ export default function UserDetails({ user, onBack }: UserDetailsProps) {
     }
   };
 
-  // View document in new tab
+  // View document in new tab (ensure leading slash so browser resolves from site root)
   const handleView = (doc: UserDocument) => {
-    window.open(doc.path, '_blank');
+    const viewPath = doc.path.startsWith('/') ? doc.path : `/${doc.path}`;
+    window.open(viewPath, '_blank');
   };
 
   useEffect(() => {

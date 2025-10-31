@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { 
   ArrowLeft, User, Mail, Phone, Calendar, MapPin, 
   FileText, DollarSign, AlertCircle, CheckCircle, 
-  Edit, Save, X, Shield, Download, File, Image,
-  Loader, ZoomIn
+  Edit, Save, X, Shield, Download, File, 
+  Loader, ZoomIn, ExternalLink
 } from 'lucide-react';
 
 interface UserData {
@@ -34,13 +34,14 @@ interface UserData {
 }
 
 interface UserDocument {
-  type: 'pdf' | 'image';
+  type: 'pdf' | 'image' | 'doc';
   name: string;
   path: string;
-  category: 'application' | 'cancellation' | 'id_front' | 'id_back' | 'id_combined';
+  category: 'application' | 'cancellation' | 'id_front' | 'id_back' | 'id_combined' | 'other';
   label: string;
   size?: number;
   createdAt?: string;
+  mimeType?: string;
 }
 
 interface UserDetailsProps {
@@ -59,6 +60,17 @@ function DocumentModal({
 }) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadClick = async () => {
+    setDownloading(true);
+    await onDownload(document);
+    setDownloading(false);
+  };
+
+  const isPDF = document.type === 'pdf';
+  const isDoc = document.type === 'doc';
+  const isImage = document.type === 'image';
 
   return (
     <div 
@@ -84,14 +96,33 @@ function DocumentModal({
         </div>
 
         <div className="flex-1 overflow-auto p-4 bg-gray-50">
-          {document.type === 'pdf' ? (
+          {isPDF && (
             <iframe
               src={document.path}
               className="w-full h-full min-h-[600px] border-0 rounded-lg bg-white"
               title={document.name}
               onError={() => setImageError(true)}
             />
-          ) : (
+          )}
+
+          {isDoc && (
+            <div className="flex items-center justify-center h-full min-h-[500px]">
+              <div className="text-center">
+                <File className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-900 mb-2">Word Document</p>
+                <p className="text-sm text-gray-600 mb-4">{document.name}</p>
+                <button
+                  onClick={handleDownloadClick}
+                  disabled={downloading}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {downloading ? 'Downloading...' : 'Download to View'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isImage && (
             <div className="flex items-center justify-center h-full min-h-[500px]">
               {!imageLoaded && !imageError && (
                 <div className="text-center">
@@ -149,11 +180,21 @@ function DocumentModal({
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => onDownload(document)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              onClick={handleDownloadClick}
+              disabled={downloading}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              <Download className="h-4 w-4" />
-              <span>Herunterladen</span>
+              {downloading ? (
+                <>
+                  <Loader className="h-4 w-4 animate-spin" />
+                  <span>Lädt...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  <span>Herunterladen</span>
+                </>
+              )}
             </button>
             <button
               onClick={onClose}
@@ -278,13 +319,17 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
     
     try {
       console.log('Downloading document:', doc.path);
-      
-      const response = await fetch(doc.path);
-      
+      // Use POST /api/users/[id]/documents so server serves the file buffer with correct headers
+      const response = await fetch(`/api/users/${user.id}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: doc.path })
+      });
+
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -309,7 +354,9 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
   const handleView = (doc: UserDocument) => {
     console.log('Viewing document:', doc);
-    setViewingDocument(doc);
+    // Ensure path has leading slash so the browser requests /uploads/.. from site root
+    const viewPath = doc.path.startsWith('/') ? doc.path : `/${doc.path}`;
+    setViewingDocument({ ...doc, path: viewPath });
   };
 
   useEffect(() => {
@@ -336,7 +383,12 @@ export default function UserDetailsEnhanced({ user, onBack }: UserDetailsProps) 
 
   const getDocumentIcon = (doc: UserDocument) => {
     if (doc.type === 'pdf') return <FileText className="h-6 w-6 text-red-600" />;
-    return <Image className="h-6 w-6 text-blue-600" />;
+    if (doc.type === 'doc') return <File className="h-6 w-6 text-blue-600" />;
+    return (
+      <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    );
   };
 
   if (loading && !userDetails) {

@@ -752,6 +752,36 @@ export class PDFTemplateManager {
         font,
         color: rgb(0, 0, 0)
       });
+      // Also draw the current date on the same line but right-aligned
+      try {
+        const rightMargin = 188; // distance from right edge
+        const dateText = currentDate;
+        const dateSize = 10;
+        // measure text width using embedded font
+        const dateWidth = font.widthOfTextAtSize(dateText, dateSize);
+        const pageWidth = firstPage.getWidth();
+        const rightX = pageWidth - rightMargin - dateWidth;
+
+        // Only draw if there is space (avoid overlapping left text)
+        if (rightX > bottomLeftMargin + 20) {
+          firstPage.drawText(dateText, {
+            x: rightX,
+            y: ortDatumY,
+            size: dateSize,
+            font,
+            color: rgb(0, 0, 0)
+          });
+        }
+      } catch (err) {
+        // If measurement fails for any reason, fall back to drawing at a fixed position
+        firstPage.drawText(currentDate, {
+          x: 450,
+          y: ortDatumY,
+          size: 10,
+          font,
+          color: rgb(0, 0, 0)
+        });
+      }
       
       const nameLineY = ortDatumY - lineSpacing;
       firstPage.drawText(` `, {

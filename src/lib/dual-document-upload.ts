@@ -29,6 +29,8 @@ export class DualDocumentUploadManager {
     'image/jpeg', 
     'image/png', 
     'image/jpg',
+    'image/gif',
+    'image/webp',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ];
@@ -92,8 +94,8 @@ export class DualDocumentUploadManager {
         }
       };
 
-      // Create combined PDF if requested
-      if (createCombinedPDF) {
+      // Create combined PDF if requested and both files are images or PDFs
+      if (createCombinedPDF && (frontResult.canBeCombined && backResult.canBeCombined)) {
         const combinedResult = await this.createCombinedPDF(
           path.join(userDir, frontResult.filename!),
           path.join(userDir, backResult.filename!),
@@ -115,7 +117,7 @@ export class DualDocumentUploadManager {
       console.error('❌ Dual document upload error:', error);
       return {
         success: false,
-        error: `Upload failed: ${error.message}`
+        error: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
@@ -127,9 +129,11 @@ export class DualDocumentUploadManager {
     base64Data: string,
     targetDir: string,
     baseFilename: string
-  ): Promise<{ success: boolean; filename?: string; size?: number; error?: string }> {
+  ): Promise<{ success: boolean; filename?: string; size?: number; error?: string; canBeCombined?: boolean }> {
     try {
       const { mimeType, buffer, fileExtension } = this.parseBase64(base64Data);
+      
+      console.log(`📄 Processing document: ${baseFilename}${fileExtension} (${mimeType}, ${buffer.length} bytes)`);
       
       const validation = this.validateFile(buffer, mimeType);
       if (!validation.valid) {
@@ -140,17 +144,24 @@ export class DualDocumentUploadManager {
       const filepath = path.join(targetDir, filename);
 
       await writeFile(filepath, buffer);
+      
+      // Check if file can be combined (only images and PDFs)
+      const canBeCombined = mimeType === 'application/pdf' || mimeType.startsWith('image/');
+
+      console.log(`✅ Document saved: ${filename} (${buffer.length} bytes, can combine: ${canBeCombined})`);
 
       return {
         success: true,
         filename,
-        size: buffer.length
+        size: buffer.length,
+        canBeCombined
       };
 
     } catch (error) {
+      console.error('❌ Error processing document:', error);
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
@@ -177,47 +188,11 @@ export class DualDocumentUploadManager {
       const backBuffer = await readFile(backPath);
       const backExt = path.extname(backPath).toLowerCase();
 
-      // Add front pages (if PDF add all pages, else treat as single image page)
-      if (frontExt === '.pdf') {
-        const frontPdf = await PDFDocument.load(frontBuffer);
-        const indices = frontPdf.getPageCount() > 0 ? Array.from({ length: frontPdf.getPageCount() }, (_, i) => i) : [0];
-        const copied = await pdfDoc.copyPages(frontPdf, indices);
-        for (const p of copied) pdfDoc.addPage(p);
-      } else {
-        // It's an image
-        const frontImage = frontExt === '.png' 
-          ? await pdfDoc.embedPng(frontBuffer)
-          : await pdfDoc.embedJpg(frontBuffer);
-        
-        const page = pdfDoc.addPage([frontImage.width, frontImage.height]);
-        page.drawImage(frontImage, {
-          x: 0,
-          y: 0,
-          width: frontImage.width,
-          height: frontImage.height
-        });
-      }
-
-      // Add back pages (if PDF add all pages, else treat as single image page)
-      if (backExt === '.pdf') {
-        const backPdf = await PDFDocument.load(backBuffer);
-        const indices = backPdf.getPageCount() > 0 ? Array.from({ length: backPdf.getPageCount() }, (_, i) => i) : [0];
-        const copied = await pdfDoc.copyPages(backPdf, indices);
-        for (const p of copied) pdfDoc.addPage(p);
-      } else {
-        // It's an image
-        const backImage = backExt === '.png'
-          ? await pdfDoc.embedPng(backBuffer)
-          : await pdfDoc.embedJpg(backBuffer);
-        
-        const page = pdfDoc.addPage([backImage.width, backImage.height]);
-        page.drawImage(backImage, {
-          x: 0,
-          y: 0,
-          width: backImage.width,
-          height: backImage.height
-        });
-      }
+      // Add front pages
+      await this.addDocumentToPDF(pdfDoc, frontBuffer, frontExt);
+      
+      // Add back pages
+      await this.addDocumentToPDF(pdfDoc, backBuffer, backExt);
 
       // Save combined PDF
       const pdfBytes = await pdfDoc.save();
@@ -236,13 +211,45 @@ export class DualDocumentUploadManager {
       console.error('❌ Error creating combined PDF:', error);
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
 
   /**
-   * Parse base64 data and extract mime type
+   * Add a document (PDF or image) to an existing PDF
+   */
+  private async addDocumentToPDF(pdfDoc: PDFDocument, buffer: Buffer, fileExt: string): Promise<void> {
+    if (fileExt === '.pdf') {
+      const sourcePdf = await PDFDocument.load(buffer);
+      const pageCount = sourcePdf.getPageCount();
+      const indices = Array.from({ length: pageCount }, (_, i) => i);
+      const copiedPages = await pdfDoc.copyPages(sourcePdf, indices);
+      for (const page of copiedPages) {
+        pdfDoc.addPage(page);
+      }
+    } else {
+      // It's an image
+      let image;
+      if (fileExt === '.png') {
+        image = await pdfDoc.embedPng(buffer);
+      } else {
+        // JPEG and other formats
+        image = await pdfDoc.embedJpg(buffer);
+      }
+      
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: image.width,
+        height: image.height
+      });
+    }
+  }
+
+  /**
+   * Parse base64 data and extract mime type with improved detection
    */
   private parseBase64(base64Data: string): {
     mimeType: string;
@@ -253,61 +260,67 @@ export class DualDocumentUploadManager {
     let base64String = base64Data;
     let fileExtension = '.bin';
 
+    // Parse data URL if present
     if (base64Data.startsWith('data:')) {
       const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/);
       if (matches) {
         mimeType = matches[1];
         base64String = matches[2];
 
-        switch (mimeType) {
-          case 'application/pdf':
-            fileExtension = '.pdf';
-            break;
-          case 'image/jpeg':
-          case 'image/jpg':
-            fileExtension = '.jpg';
-            break;
-          case 'image/png':
-            fileExtension = '.png';
-            break;
-        }
+        // Map mime type to extension
+        const mimeToExt: Record<string, string> = {
+          'application/pdf': '.pdf',
+          'image/jpeg': '.jpg',
+          'image/jpg': '.jpg',
+          'image/png': '.png',
+          'image/gif': '.gif',
+          'image/webp': '.webp',
+          'application/msword': '.doc',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+        };
+        
+        fileExtension = mimeToExt[mimeType] || '.bin';
       }
     }
 
     const buffer = Buffer.from(base64String, 'base64');
 
-    // If mimeType is still generic, try to detect from magic bytes
-    if (mimeType === 'application/octet-stream') {
-      // Check for PDF
-      if (buffer.length >= 4 && (
-        buffer.slice(0, 4).toString() === '%PDF' ||
-        buffer.slice(0, 4).toString('hex') === '25504446'
-      )) {
+    // If mimeType is still generic, detect from magic bytes
+    if (mimeType === 'application/octet-stream' && buffer.length >= 8) {
+      // PDF magic bytes: %PDF
+      if (buffer.slice(0, 4).toString() === '%PDF') {
         mimeType = 'application/pdf';
         fileExtension = '.pdf';
-      } 
-      // Check for PNG
-      else if (buffer.length >= 8 && buffer.slice(0, 8).equals(Buffer.from([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]))) {
+      }
+      // PNG magic bytes
+      else if (buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) {
         mimeType = 'image/png';
         fileExtension = '.png';
-      } 
-      // Check for JPEG
-      else if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      }
+      // JPEG magic bytes
+      else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
         mimeType = 'image/jpeg';
         fileExtension = '.jpg';
       }
-      // Check for DOC
-      else if (buffer.length >= 8 && buffer.slice(0, 8).equals(Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]))) {
+      // DOC magic bytes (OLE2)
+      else if (buffer.slice(0, 8).equals(Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]))) {
         mimeType = 'application/msword';
         fileExtension = '.doc';
       }
-      // Check for DOCX (zip format)
-      else if (buffer.length >= 4 && buffer.slice(0, 4).equals(Buffer.from([0x50, 0x4B, 0x03, 0x04]))) {
+      // DOCX magic bytes (ZIP format)
+      else if (buffer.slice(0, 4).equals(Buffer.from([0x50, 0x4B, 0x03, 0x04]))) {
         mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         fileExtension = '.docx';
       }
+      // GIF magic bytes
+      else if (buffer.slice(0, 6).toString() === 'GIF89a' || buffer.slice(0, 6).toString() === 'GIF87a') {
+        mimeType = 'image/gif';
+        fileExtension = '.gif';
+      }
     }
 
+    console.log(`📄 Parsed file: ${mimeType}, ${fileExtension}, ${buffer.length} bytes`);
+    
     return { mimeType, buffer, fileExtension };
   }
 
@@ -332,7 +345,7 @@ export class DualDocumentUploadManager {
     if (!this.allowedTypes.includes(mimeType)) {
       return {
         valid: false,
-        error: `Invalid file type. Allowed types: ${this.allowedTypes.join(', ')}`
+        error: `Invalid file type: ${mimeType}. Allowed types: ${this.allowedTypes.join(', ')}`
       };
     }
 
