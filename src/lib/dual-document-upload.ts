@@ -25,14 +25,21 @@ export class DualDocumentUploadManager {
   private uploadsDir: string;
   private maxFileSize: number = 10 * 1024 * 1024; // 10MB strict limit
   private allowedTypes: string[] = [
-    'application/pdf',
+    // Images
     'image/jpeg', 
     'image/png', 
     'image/jpg',
     'image/gif',
     'image/webp',
+    'image/bmp',
+    'image/tiff',
+    // Documents
+    'application/pdf',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain'
   ];
 
   constructor() {
@@ -59,6 +66,14 @@ export class DualDocumentUploadManager {
         };
       }
 
+      // Validate base64 format
+      if (typeof frontBase64 !== 'string' || typeof backBase64 !== 'string') {
+        return {
+          success: false,
+          error: 'Invalid document format - must be base64 strings'
+        };
+      }
+
       // Create user directory
       const userDir = path.join(this.uploadsDir, 'id-documents', userId);
       await mkdir(userDir, { recursive: true });
@@ -78,7 +93,7 @@ export class DualDocumentUploadManager {
         console.error(`❌ [UPLOAD] Front upload failed: ${frontResult.error}`);
         return { 
           success: false, 
-          error: `Front document upload failed: ${frontResult.error}` 
+          error: `Vorderseitendokument fehlgeschlagen: ${frontResult.error}` 
         };
       }
 
@@ -94,7 +109,7 @@ export class DualDocumentUploadManager {
         console.error(`❌ [UPLOAD] Back upload failed: ${backResult.error}`);
         return { 
           success: false, 
-          error: `Back document upload failed: ${backResult.error}` 
+          error: `Rückseitendokument fehlgeschlagen: ${backResult.error}` 
         };
       }
 
@@ -108,11 +123,11 @@ export class DualDocumentUploadManager {
         },
         sizes: {
           front: frontResult.size,
-          back: backResult.size
+          back: frontResult.size
         }
       };
 
-      // Create combined PDF if both files can be combined
+      // Create combined PDF only if both files are images or PDFs
       if (createCombinedPDF && frontResult.canBeCombined && backResult.canBeCombined) {
         console.log(`📄 [UPLOAD] Creating combined PDF...`);
         const combinedResult = await this.createCombinedPDF(
@@ -161,18 +176,18 @@ export class DualDocumentUploadManager {
     canBeCombined?: boolean 
   }> {
     try {
-      // Parse base64 with size validation
-      const parseResult = this.parseBase64(base64Data);
+      // Parse base64 with enhanced error handling
+      const parseResult = this.parseBase64Enhanced(base64Data);
       if (!parseResult.success) {
         return { success: false, error: parseResult.error };
       }
 
       const { mimeType, buffer, fileExtension } = parseResult;
       
-      console.log(`📄 [PROCESS] Document parsed: ${baseFilename}${fileExtension} (${mimeType}, ${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+      console.log(`📄 [PROCESS] Document parsed: ${baseFilename}${fileExtension} (${mimeType}, ${(buffer!.length / 1024 / 1024).toFixed(2)}MB)`);
       
       // Strict validation
-      const validation = this.validateFile(buffer, mimeType);
+      const validation = this.validateFile(buffer!, mimeType!);
       if (!validation.valid) {
         return { success: false, error: validation.error };
       }
@@ -181,17 +196,17 @@ export class DualDocumentUploadManager {
       const filepath = path.join(targetDir, filename);
 
       // Write file with error handling
-      await writeFile(filepath, buffer);
+      await writeFile(filepath, buffer!);
       
       // Check if file can be combined (only images and PDFs)
-      const canBeCombined = mimeType === 'application/pdf' || mimeType.startsWith('image/');
+      const canBeCombined = mimeType === 'application/pdf' || mimeType!.startsWith('image/');
 
-      console.log(`✅ [PROCESS] Document saved: ${filename} (${(buffer.length / 1024 / 1024).toFixed(2)}MB, combinable: ${canBeCombined})`);
+      console.log(`✅ [PROCESS] Document saved: ${filename} (${(buffer!.length / 1024 / 1024).toFixed(2)}MB, combinable: ${canBeCombined})`);
 
       return {
         success: true,
         filename,
-        size: buffer.length,
+        size: buffer!.length,
         canBeCombined
       };
 
@@ -205,7 +220,216 @@ export class DualDocumentUploadManager {
   }
 
   /**
-   * Create combined PDF with optimized performance
+   * Enhanced base64 parsing with better error handling and format detection
+   */
+  private parseBase64Enhanced(base64Data: string): {
+    success: boolean;
+    mimeType?: string;
+    buffer?: Buffer;
+    fileExtension?: string;
+    error?: string;
+  } {
+    try {
+      if (!base64Data || typeof base64Data !== 'string') {
+        return { 
+          success: false, 
+          error: 'Invalid base64 data - must be a non-empty string' 
+        };
+      }
+
+      let mimeType = 'application/octet-stream';
+      let base64String = base64Data.trim();
+      let fileExtension = '.bin';
+
+      // Parse data URL if present
+      if (base64String.startsWith('data:')) {
+        const dataUrlMatch = base64String.match(/^data:([^;,]+)(;base64)?,(.+)$/);
+        if (!dataUrlMatch) {
+          return { 
+            success: false, 
+            error: 'Invalid data URL format' 
+          };
+        }
+
+        mimeType = dataUrlMatch[1];
+        const isBase64 = dataUrlMatch[2] === ';base64';
+        base64String = dataUrlMatch[3];
+
+        if (!isBase64) {
+          return {
+            success: false,
+            error: 'Only base64 encoded data URLs are supported'
+          };
+        }
+
+        // Map mime type to extension
+        const mimeToExt: Record<string, string> = {
+          // Images
+          'image/jpeg': '.jpg',
+          'image/jpg': '.jpg',
+          'image/png': '.png',
+          'image/gif': '.gif',
+          'image/webp': '.webp',
+          'image/bmp': '.bmp',
+          'image/tiff': '.tiff',
+          // Documents
+          'application/pdf': '.pdf',
+          'application/msword': '.doc',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+          'application/vnd.ms-excel': '.xls',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+          'text/plain': '.txt'
+        };
+        
+        fileExtension = mimeToExt[mimeType] || '.bin';
+      }
+
+      // Clean base64 string (remove whitespace and newlines)
+      base64String = base64String.replace(/\s/g, '');
+
+      // Validate base64 string format
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64String)) {
+        return {
+          success: false,
+          error: 'Invalid base64 string format'
+        };
+      }
+
+      // Decode base64
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(base64String, 'base64');
+      } catch (decodeError) {
+        return { 
+          success: false, 
+          error: 'Failed to decode base64 data' 
+        };
+      }
+
+      // STRICT SIZE CHECK
+      if (buffer.length > this.maxFileSize) {
+        const sizeMB = (buffer.length / 1024 / 1024).toFixed(2);
+        return {
+          success: false,
+          error: `File too large (${sizeMB}MB). Maximum: 10MB`
+        };
+      }
+
+      if (buffer.length === 0) {
+        return { success: false, error: 'File is empty' };
+      }
+
+      // Detect mime type from magic bytes if still generic or to verify
+      if (buffer.length >= 8) {
+        const detectedMime = this.detectMimeTypeFromBuffer(buffer);
+        if (detectedMime) {
+          // Use detected mime type if we couldn't determine it from data URL
+          if (mimeType === 'application/octet-stream') {
+            mimeType = detectedMime.mimeType;
+            fileExtension = detectedMime.extension;
+          }
+        }
+      }
+
+      console.log(`📄 [PARSE] File parsed successfully: ${mimeType}, ${fileExtension}, ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
+      
+      return { 
+        success: true,
+        mimeType, 
+        buffer, 
+        fileExtension 
+      };
+
+    } catch (error) {
+      console.error('❌ [PARSE] Error parsing base64:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to parse file data'
+      };
+    }
+  }
+
+  /**
+   * Detect MIME type from file magic bytes
+   */
+  private detectMimeTypeFromBuffer(buffer: Buffer): { mimeType: string; extension: string } | null {
+    // PDF
+    if (buffer.slice(0, 4).toString() === '%PDF') {
+      return { mimeType: 'application/pdf', extension: '.pdf' };
+    }
+    // PNG
+    if (buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) {
+      return { mimeType: 'image/png', extension: '.png' };
+    }
+    // JPEG
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      return { mimeType: 'image/jpeg', extension: '.jpg' };
+    }
+    // GIF
+    if (buffer.slice(0, 6).toString() === 'GIF89a' || buffer.slice(0, 6).toString() === 'GIF87a') {
+      return { mimeType: 'image/gif', extension: '.gif' };
+    }
+    // BMP
+    if (buffer[0] === 0x42 && buffer[1] === 0x4D) {
+      return { mimeType: 'image/bmp', extension: '.bmp' };
+    }
+    // TIFF
+    if ((buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2A && buffer[3] === 0x00) ||
+        (buffer[0] === 0x4D && buffer[1] === 0x4D && buffer[2] === 0x00 && buffer[3] === 0x2A)) {
+      return { mimeType: 'image/tiff', extension: '.tiff' };
+    }
+    // DOC (OLE2)
+    if (buffer.slice(0, 8).equals(Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]))) {
+      return { mimeType: 'application/msword', extension: '.doc' };
+    }
+    // DOCX/XLSX (ZIP format)
+    if (buffer.slice(0, 4).equals(Buffer.from([0x50, 0x4B, 0x03, 0x04]))) {
+      // Could be DOCX, XLSX, or other Office format - check for content types
+      const bufferStr = buffer.toString('utf8', 0, Math.min(buffer.length, 1000));
+      if (bufferStr.includes('word/')) {
+        return { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extension: '.docx' };
+      } else if (bufferStr.includes('xl/')) {
+        return { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', extension: '.xlsx' };
+      }
+      return { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extension: '.docx' };
+    }
+
+    return null;
+  }
+
+  /**
+   * Validate uploaded file with strict checks
+   */
+  private validateFile(buffer: Buffer, mimeType: string): {
+    valid: boolean;
+    error?: string;
+  } {
+    // CRITICAL: Double-check size
+    if (buffer.length > this.maxFileSize) {
+      const sizeMB = (buffer.length / 1024 / 1024).toFixed(2);
+      const maxSizeMB = (this.maxFileSize / 1024 / 1024).toFixed(0);
+      return {
+        valid: false,
+        error: `File too large (${sizeMB}MB). Maximum: ${maxSizeMB}MB`
+      };
+    }
+
+    if (buffer.length === 0) {
+      return { valid: false, error: 'File is empty' };
+    }
+
+    if (!this.allowedTypes.includes(mimeType)) {
+      return {
+        valid: false,
+        error: `Invalid file type: ${mimeType}. Allowed: Images, PDF, Word, Excel, Text`
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Create combined PDF from front and back documents (only for images and PDFs)
    */
   private async createCombinedPDF(
     frontPath: string,
@@ -214,7 +438,7 @@ export class DualDocumentUploadManager {
     filename: string
   ): Promise<{ success: boolean; filename?: string; size?: number; error?: string }> {
     try {
-      console.log('📄 [PDF] Creating combined PDF from front and back documents...');
+      console.log('📄 [PDF] Creating combined PDF...');
 
       const pdfDoc = await PDFDocument.create();
       
@@ -262,15 +486,18 @@ export class DualDocumentUploadManager {
       for (const page of copiedPages) {
         pdfDoc.addPage(page);
       }
+    } else if (['.png', '.webp', '.gif', '.bmp', '.tiff'].includes(fileExt)) {
+      const image = await pdfDoc.embedPng(buffer);
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: image.width,
+        height: image.height
+      });
     } else {
-      // It's an image
-      let image;
-      if (fileExt === '.png' || fileExt === '.webp') {
-        image = await pdfDoc.embedPng(buffer);
-      } else {
-        image = await pdfDoc.embedJpg(buffer);
-      }
-      
+      // JPEG and others
+      const image = await pdfDoc.embedJpg(buffer);
       const page = pdfDoc.addPage([image.width, image.height]);
       page.drawImage(image, {
         x: 0,
@@ -279,150 +506,6 @@ export class DualDocumentUploadManager {
         height: image.height
       });
     }
-  }
-
-  /**
-   * Parse base64 data with strict size validation and improved mime detection
-   */
-  private parseBase64(base64Data: string): {
-    success: boolean;
-    mimeType?: string;
-    buffer?: Buffer;
-    fileExtension?: string;
-    error?: string;
-  } {
-    try {
-      let mimeType = 'application/octet-stream';
-      let base64String = base64Data;
-      let fileExtension = '.bin';
-
-      // Parse data URL if present
-      if (base64Data.startsWith('data:')) {
-        const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/);
-        if (matches) {
-          mimeType = matches[1];
-          base64String = matches[2];
-
-          const mimeToExt: Record<string, string> = {
-            'application/pdf': '.pdf',
-            'image/jpeg': '.jpg',
-            'image/jpg': '.jpg',
-            'image/png': '.png',
-            'image/gif': '.gif',
-            'image/webp': '.webp',
-            'application/msword': '.doc',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
-          };
-          
-          fileExtension = mimeToExt[mimeType] || '.bin';
-        }
-      }
-
-      // Decode base64
-      let buffer: Buffer;
-      try {
-        buffer = Buffer.from(base64String, 'base64');
-      } catch (decodeError) {
-        return { 
-          success: false, 
-          error: 'Invalid base64 encoding' 
-        };
-      }
-
-      // STRICT SIZE CHECK BEFORE ANY FURTHER PROCESSING
-      if (buffer.length > this.maxFileSize) {
-        const sizeMB = (buffer.length / 1024 / 1024).toFixed(2);
-        return {
-          success: false,
-          error: `File too large (${sizeMB}MB). Maximum allowed: 10MB`
-        };
-      }
-
-      if (buffer.length === 0) {
-        return { success: false, error: 'File is empty' };
-      }
-
-      // Detect mime type from magic bytes if still generic
-      if (mimeType === 'application/octet-stream' && buffer.length >= 8) {
-        // PDF
-        if (buffer.slice(0, 4).toString() === '%PDF') {
-          mimeType = 'application/pdf';
-          fileExtension = '.pdf';
-        }
-        // PNG
-        else if (buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) {
-          mimeType = 'image/png';
-          fileExtension = '.png';
-        }
-        // JPEG
-        else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
-          mimeType = 'image/jpeg';
-          fileExtension = '.jpg';
-        }
-        // DOC
-        else if (buffer.slice(0, 8).equals(Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]))) {
-          mimeType = 'application/msword';
-          fileExtension = '.doc';
-        }
-        // DOCX
-        else if (buffer.slice(0, 4).equals(Buffer.from([0x50, 0x4B, 0x03, 0x04]))) {
-          mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          fileExtension = '.docx';
-        }
-        // GIF
-        else if (buffer.slice(0, 6).toString() === 'GIF89a' || buffer.slice(0, 6).toString() === 'GIF87a') {
-          mimeType = 'image/gif';
-          fileExtension = '.gif';
-        }
-      }
-
-      console.log(`📄 [PARSE] File parsed successfully: ${mimeType}, ${fileExtension}, ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
-      
-      return { 
-        success: true,
-        mimeType, 
-        buffer, 
-        fileExtension 
-      };
-
-    } catch (error) {
-      console.error('❌ [PARSE] Error parsing base64:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to parse file data'
-      };
-    }
-  }
-
-  /**
-   * Validate uploaded file with strict checks
-   */
-  private validateFile(buffer: Buffer, mimeType: string): {
-    valid: boolean;
-    error?: string;
-  } {
-    // CRITICAL: Double-check size even after parsing
-    if (buffer.length > this.maxFileSize) {
-      const sizeMB = (buffer.length / 1024 / 1024).toFixed(2);
-      const maxSizeMB = (this.maxFileSize / 1024 / 1024).toFixed(0);
-      return {
-        valid: false,
-        error: `File too large (${sizeMB}MB). Maximum: ${maxSizeMB}MB`
-      };
-    }
-
-    if (buffer.length === 0) {
-      return { valid: false, error: 'File is empty' };
-    }
-
-    if (!this.allowedTypes.includes(mimeType)) {
-      return {
-        valid: false,
-        error: `Invalid file type: ${mimeType}. Allowed: JPG, PNG, GIF, WebP, PDF, Word`
-      };
-    }
-
-    return { valid: true };
   }
 
   /**

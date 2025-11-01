@@ -12,7 +12,6 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
 
   // Optimized file size validation
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-  const CHUNK_SIZE = 512 * 1024; // 512KB chunks for reading
 
   const validateFileSize = (file) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -21,37 +20,69 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         error: `Datei ist zu groß (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum 10MB erlaubt.`
       };
     }
-    return { valid: true };
-  };
-
-  const validateFileType = (file) => {
-    const allowedTypes = [
-      "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp",
-      "application/pdf", 
-      "application/msword", 
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ];
-    
-    if (!allowedTypes.includes(file.type)) {
+    if (file.size === 0) {
       return {
         valid: false,
-        error: "Nur JPEG, PNG, GIF, WebP, PDF oder Word Dateien sind erlaubt."
+        error: "Datei ist leer. Bitte wählen Sie eine gültige Datei."
       };
     }
     return { valid: true };
   };
 
-  // Optimized file reading with chunking for large files
+  const validateFileType = (file) => {
+    const allowedTypes = [
+      "image/jpeg", 
+      "image/png", 
+      "image/jpg", 
+      "image/gif", 
+      "image/webp",
+      "image/bmp",
+      "image/tiff",
+      "application/pdf", 
+      "application/msword", 
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/plain"
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      return {
+        valid: false,
+        error: `Dateityp nicht unterstützt (${file.type}). Erlaubt: Bilder, PDF, Word, Excel, Text`
+      };
+    }
+    return { valid: true };
+  };
+
+  // Enhanced file reading with proper encoding and chunking
   const readFileOptimized = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
       reader.onload = (event) => {
-        resolve(event.target.result);
+        try {
+          const result = event.target.result;
+          
+          // Ensure result is a string (data URL)
+          if (typeof result !== 'string') {
+            reject(new Error('Fehler beim Lesen der Datei.'));
+            return;
+          }
+
+          // Validate base64 string format
+          if (!result.startsWith('data:')) {
+            reject(new Error('Ungültiges Dateiformat.'));
+            return;
+          }
+
+          resolve(result);
+        } catch (error) {
+          reject(new Error('Fehler beim Verarbeiten der Datei.'));
+        }
       };
       
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
+      reader.onerror = () => {
         reject(new Error('Fehler beim Lesen der Datei.'));
       };
 
@@ -59,13 +90,11 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         reject(new Error('Datei-Upload wurde abgebrochen.'));
       };
 
-      // For smaller files (< 5MB), read directly
-      // For larger files, we still use readAsDataURL but with better error handling
-      if (file.size < 5 * 1024 * 1024) {
+      // Always use readAsDataURL for consistent base64 encoding
+      try {
         reader.readAsDataURL(file);
-      } else {
-        // For larger files, show progress
-        reader.readAsDataURL(file);
+      } catch (error) {
+        reject(new Error('Fehler beim Starten des Datei-Uploads.'));
       }
     });
   };
@@ -73,6 +102,9 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
   const handleFileUpload = async (e, side) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Clear any previous errors
+    setSubmitError("");
 
     // Set loading state immediately
     if (side === "front") {
@@ -86,6 +118,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
       const sizeValidation = validateFileSize(file);
       if (!sizeValidation.valid) {
         setSubmitError(sizeValidation.error);
+        e.target.value = ''; // Clear the input
         return;
       }
 
@@ -93,6 +126,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
       const typeValidation = validateFileType(file);
       if (!typeValidation.valid) {
         setSubmitError(typeValidation.error);
+        e.target.value = ''; // Clear the input
         return;
       }
 
@@ -102,10 +136,15 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         size: `${(file.size / 1024 / 1024).toFixed(2)}MB`
       });
 
-      // STEP 3: Read file optimized
+      // STEP 3: Read file with optimized encoding
       const base64Result = await readFileOptimized(file);
 
-      // STEP 4: Store file info and base64
+      // STEP 4: Validate the base64 result
+      if (!base64Result || typeof base64Result !== 'string') {
+        throw new Error('Fehler beim Konvertieren der Datei.');
+      }
+
+      // STEP 5: Store file info and base64
       const fileData = {
         file: file,
         base64: base64Result,
@@ -149,7 +188,6 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
       }
       
       console.log(`✅ ${side} document uploaded successfully (${(file.size / 1024).toFixed(1)}KB)`);
-      setSubmitError(""); // Clear any previous errors
       
     } catch (error) {
       console.error('File upload error:', error);
@@ -199,6 +237,10 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
       return <FileText className="w-16 h-16 text-red-500" />;
     } else if (fileType?.includes('word') || fileType?.includes('document')) {
       return <File className="w-16 h-16 text-blue-600" />;
+    } else if (fileType?.includes('excel') || fileType?.includes('spreadsheet')) {
+      return <File className="w-16 h-16 text-green-600" />;
+    } else if (fileType === 'text/plain') {
+      return <FileText className="w-16 h-16 text-gray-600" />;
     }
     return <File className="w-16 h-16 text-gray-500" />;
   };
@@ -207,6 +249,8 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
     if (fileType?.startsWith('image/')) return 'Bild';
     if (fileType === 'application/pdf') return 'PDF Dokument';
     if (fileType?.includes('word') || fileType?.includes('document')) return 'Word Dokument';
+    if (fileType?.includes('excel') || fileType?.includes('spreadsheet')) return 'Excel Dokument';
+    if (fileType === 'text/plain') return 'Text Dokument';
     return 'Dokument';
   };
 
@@ -228,7 +272,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         {!isImage && (
           <div className="flex flex-col items-center justify-center h-full p-4">
             {getFileIcon(fileData.type)}
-            <p className="text-sm text-gray-700 font-medium mt-2 truncate max-w-[200px]">
+            <p className="text-sm text-gray-700 font-medium mt-2 truncate max-w-[200px]" title={fileData.name}>
               {fileData.name}
             </p>
             <p className="text-xs text-gray-500 mt-1">
@@ -267,7 +311,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         <input
           type="file"
           onChange={(e) => handleFileUpload(e, side)}
-          accept="image/*,.pdf,.doc,.docx"
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
           className="hidden"
           disabled={isUploading}
         />
@@ -288,7 +332,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
               <p className="text-sm font-medium text-gray-700 mb-1">
                 {side === "front" ? "Vorderseite hochladen" : "Rückseite hochladen"}
               </p>
-              <p className="text-xs text-gray-500 text-center">JPG, PNG, PDF oder Word</p>
+              <p className="text-xs text-gray-500 text-center">Alle gängigen Formate</p>
               <p className="text-xs text-gray-500 text-center">(max. 10MB)</p>
               <p className="text-xs text-blue-600 mt-2 font-medium">Klicken zum Auswählen</p>
             </>
@@ -359,10 +403,10 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-blue-700">
           <p className="font-medium mb-1">Unterstützte Dateiformate:</p>
-          <p>• Bilder: JPG, PNG, GIF, WebP</p>
-          <p>• Dokumente: PDF, Word (.doc, .docx)</p>
+          <p>• Bilder: JPG, PNG, GIF, WebP, BMP, TIFF</p>
+          <p>• Dokumente: PDF, Word, Excel, Text</p>
           <p>• Maximale Dateigröße: 10MB pro Datei</p>
-          <p className="mt-1 font-medium">💡 Tipp: Komprimieren Sie große Dateien vor dem Hochladen</p>
+          <p className="mt-1 font-medium">💡 Tipp: Verwenden Sie klare, gut lesbare Scans</p>
         </div>
       </div>
     </div>

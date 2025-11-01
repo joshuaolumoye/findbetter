@@ -1,29 +1,50 @@
 // app/api/upload/dual-documents/route.ts
-// Add these exports at the TOP of your route file
-
 import { NextRequest, NextResponse } from 'next/server';
 import { dualDocumentUploadManager } from '../../../../lib/dual-document-upload';
 
-// ✅ CRITICAL: These configurations must be at the top level
-export const maxDuration = 60; // 60 seconds timeout
-export const dynamic = 'force-dynamic'; // Disable caching
-export const runtime = 'nodejs'; // Use Node.js runtime (not Edge)
-
-// ✅ For App Router (Next.js 13+), body size is controlled differently
-// The actual limit is set in next.config.ts experimental.serverActions.bodySizeLimit
+// Increase timeout for large file uploads
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   console.log('📄 [API] Dual document upload API called');
   
   try {
-    // Parse request body with timeout protection
-    const body = await Promise.race([
-      request.json(),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout - body too large')), 30000)
-      )
-    ]) as any;
+    // Parse request body with extended timeout and better error handling
+    let body: any;
+    try {
+      body = await Promise.race([
+        request.json(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), 30000)
+        )
+      ]);
+    } catch (parseError: any) {
+      console.error('❌ [API] Failed to parse request body:', parseError);
+      
+      if (parseError.message === 'REQUEST_TIMEOUT') {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Request timeout - Dateien sind möglicherweise zu groß',
+            code: 'REQUEST_TIMEOUT'
+          },
+          { status: 408 }
+        );
+      }
+      
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Ungültiges Request-Format. Bitte versuchen Sie es erneut.',
+          code: 'INVALID_REQUEST',
+          details: process.env.NODE_ENV === 'development' ? parseError.message : undefined
+        },
+        { status: 400 }
+      );
+    }
 
     const { frontImage, backImage, userId } = body;
 
@@ -33,7 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           success: false,
-          error: 'User ID is required',
+          error: 'Benutzer-ID fehlt',
           code: 'MISSING_USER_ID'
         },
         { status: 400 }
@@ -45,15 +66,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           success: false,
-          error: 'Both front and back images are required',
+          error: 'Beide Dokumentenseiten (Vorder- und Rückseite) sind erforderlich',
           code: 'MISSING_IMAGES'
         },
         { status: 400 }
       );
     }
 
+    // Validate that images are strings
+    if (typeof frontImage !== 'string' || typeof backImage !== 'string') {
+      console.error('❌ [API] Invalid image format');
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Ungültiges Bildformat',
+          code: 'INVALID_IMAGE_FORMAT'
+        },
+        { status: 400 }
+      );
+    }
+
     // STEP 2: Quick size estimation (base64 string length)
-    const frontSizeEstimate = (frontImage.length * 3) / 4; // Rough base64 to bytes
+    const frontSizeEstimate = (frontImage.length * 3) / 4;
     const backSizeEstimate = (backImage.length * 3) / 4;
     const maxSize = 10 * 1024 * 1024; // 10MB
 
@@ -87,30 +121,60 @@ export async function POST(request: NextRequest) {
     // STEP 3: Process upload with timeout protection
     console.log(`📄 [API] Processing upload for user ${userId}`);
     
-    const result = await Promise.race([
-      dualDocumentUploadManager.saveDualDocuments(
-        frontImage,
-        backImage,
-        userId,
-        true // Create combined PDF
-      ),
-      new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Upload processing timeout')), 45000)
-      )
-    ]);
+    let result;
+    try {
+      result = await Promise.race([
+        dualDocumentUploadManager.saveDualDocuments(
+          frontImage,
+          backImage,
+          userId,
+          true // Create combined PDF
+        ),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('PROCESSING_TIMEOUT')), 45000)
+        )
+      ]);
+    } catch (uploadError: any) {
+      console.error('❌ [API] Upload processing error:', uploadError);
+      
+      if (uploadError.message === 'PROCESSING_TIMEOUT') {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Upload-Timeout. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.',
+            code: 'PROCESSING_TIMEOUT'
+          },
+          { status: 408 }
+        );
+      }
+      
+      throw uploadError; // Re-throw to be caught by outer catch
+    }
 
     // STEP 4: Handle result
     if (!result.success) {
       console.error('❌ [API] Upload failed:', result.error);
       
-      // Return specific error with appropriate status code
-      const statusCode = result.error?.includes('too large') || result.error?.includes('zu groß') ? 413 : 500;
+      // Determine status code based on error type
+      let statusCode = 500;
+      let errorCode = 'UPLOAD_FAILED';
+      
+      if (result.error?.includes('too large') || result.error?.includes('zu groß')) {
+        statusCode = 413;
+        errorCode = 'FILE_TOO_LARGE';
+      } else if (result.error?.includes('Invalid') || result.error?.includes('Ungültig')) {
+        statusCode = 400;
+        errorCode = 'INVALID_FILE';
+      } else if (result.error?.includes('format')) {
+        statusCode = 400;
+        errorCode = 'INVALID_FORMAT';
+      }
       
       return NextResponse.json(
         { 
           success: false,
           error: result.error || 'Upload fehlgeschlagen',
-          code: statusCode === 413 ? 'FILE_TOO_LARGE' : 'UPLOAD_FAILED'
+          code: errorCode
         },
         { status: statusCode }
       );
@@ -133,30 +197,40 @@ export async function POST(request: NextRequest) {
       message: 'Dokumente erfolgreich hochgeladen'
     }, { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     const processingTime = Date.now() - startTime;
     console.error(`❌ [API] Fatal error after ${processingTime}ms:`, error);
     
     // Handle specific error types
-    let errorMessage = 'Upload fehlgeschlagen';
+    let errorMessage = 'Upload fehlgeschlagen. Bitte versuchen Sie es erneut.';
     let statusCode = 500;
     let errorCode = 'UPLOAD_ERROR';
 
     if (error instanceof Error) {
-      if (error.message.includes('timeout')) {
-        errorMessage = 'Upload-Timeout - Datei möglicherweise zu groß oder Verbindung zu langsam';
+      if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        errorMessage = 'Upload-Timeout. Datei möglicherweise zu groß oder Verbindung zu langsam.';
         statusCode = 408;
         errorCode = 'TIMEOUT';
       } else if (error.message.includes('too large') || error.message.includes('zu groß')) {
-        errorMessage = 'Datei überschreitet die maximale Größe von 10MB';
+        errorMessage = 'Datei überschreitet die maximale Größe von 10MB.';
         statusCode = 413;
         errorCode = 'FILE_TOO_LARGE';
       } else if (error.message.includes('Invalid') || error.message.includes('Ungültig')) {
-        errorMessage = error.message;
+        errorMessage = 'Ungültiges Dateiformat. ' + error.message;
         statusCode = 400;
         errorCode = 'INVALID_FILE';
-      } else {
-        errorMessage = error.message;
+      } else if (error.message.includes('base64')) {
+        errorMessage = 'Fehler beim Verarbeiten der Datei. Bitte versuchen Sie es erneut.';
+        statusCode = 400;
+        errorCode = 'INVALID_ENCODING';
+      } else if (error.message.includes('ENOSPC')) {
+        errorMessage = 'Nicht genügend Speicherplatz auf dem Server.';
+        statusCode = 507;
+        errorCode = 'INSUFFICIENT_STORAGE';
+      } else if (error.message.includes('EACCES') || error.message.includes('permission')) {
+        errorMessage = 'Keine Berechtigung zum Schreiben der Datei.';
+        statusCode = 500;
+        errorCode = 'PERMISSION_DENIED';
       }
     }
     
@@ -165,7 +239,9 @@ export async function POST(request: NextRequest) {
         success: false,
         error: errorMessage,
         code: errorCode,
-        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.stack : String(error) : undefined
+        details: process.env.NODE_ENV === 'development' ? 
+          (error instanceof Error ? error.stack : String(error)) : 
+          undefined
       },
       { status: statusCode }
     );
@@ -180,8 +256,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       status: 'healthy',
       maxFileSize: '10MB',
-      allowedTypes: ['JPG', 'PNG', 'GIF', 'WebP', 'PDF', 'DOC', 'DOCX'],
-      timestamp: new Date().toISOString()
+      allowedTypes: [
+        'Images: JPG, PNG, GIF, WebP, BMP, TIFF',
+        'Documents: PDF, Word, Excel, Text'
+      ],
+      timestamp: new Date().toISOString(),
+      version: '2.0.0'
     });
   } catch (error) {
     return NextResponse.json(
