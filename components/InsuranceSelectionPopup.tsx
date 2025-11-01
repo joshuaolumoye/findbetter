@@ -318,17 +318,43 @@ const handleSubmit = async (e) => {
       console.log("📄 [SUBMIT] Step 3: Uploading ID documents...");
 
       try {
-        const uploadResponse = await fetch("/api/upload/dual-documents", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            frontImage: formData.idDocumentFrontBase64,
-            backImage: formData.idDocumentBackBase64,
-            userId: userId.toString(),
-          }),
-        });
+        let uploadResponse;
+
+        // If File objects exist (not just base64), send multipart/form-data to avoid large JSON bodies
+        if (formData.idDocumentFront instanceof File || formData.idDocumentBack instanceof File) {
+          const fd = new FormData();
+          fd.append('userId', userId.toString());
+
+          if (formData.idDocumentFront instanceof File) {
+            fd.append('frontFile', formData.idDocumentFront);
+          } else if (formData.idDocumentFrontBase64) {
+            fd.append('frontBase64', formData.idDocumentFrontBase64);
+          }
+
+          if (formData.idDocumentBack instanceof File) {
+            fd.append('backFile', formData.idDocumentBack);
+          } else if (formData.idDocumentBackBase64) {
+            fd.append('backBase64', formData.idDocumentBackBase64);
+          }
+
+          uploadResponse = await fetch('/api/upload/dual-documents', {
+            method: 'POST',
+            body: fd,
+          });
+        } else {
+          // Fallback: send base64 JSON payload (existing behavior)
+          uploadResponse = await fetch('/api/upload/dual-documents', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              frontImage: formData.idDocumentFrontBase64,
+              backImage: formData.idDocumentBackBase64,
+              userId: userId.toString(),
+            }),
+          });
+        }
 
         const uploadResult = await uploadResponse.json();
 

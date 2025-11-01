@@ -12,41 +12,86 @@ export async function POST(request: NextRequest) {
   console.log('📄 [API] Dual document upload API called');
   
   try {
-    // Parse request body with extended timeout and better error handling
-    let body: any;
-    try {
-      body = await Promise.race([
-        request.json(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), 30000)
-        )
-      ]);
-    } catch (parseError: any) {
-      console.error('❌ [API] Failed to parse request body:', parseError);
-      
-      if (parseError.message === 'REQUEST_TIMEOUT') {
+    // Support both JSON (base64) and multipart/form-data (binary files)
+    let frontImage: string | undefined;
+    let backImage: string | undefined;
+    let userId: string | undefined;
+
+    const contentType = request.headers.get('content-type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      // If the client sent files via FormData, read them and convert to base64
+      try {
+        const formData = await request.formData();
+        const frontFile = formData.get('frontFile') as File | null;
+        const backFile = formData.get('backFile') as File | null;
+        userId = formData.get('userId')?.toString();
+
+        if (frontFile instanceof File) {
+          const frontBuf = Buffer.from(await frontFile.arrayBuffer());
+          frontImage = `data:${frontFile.type};base64,${frontBuf.toString('base64')}`;
+        } else if (formData.get('frontBase64')) {
+          frontImage = formData.get('frontBase64')?.toString();
+        }
+
+        if (backFile instanceof File) {
+          const backBuf = Buffer.from(await backFile.arrayBuffer());
+          backImage = `data:${backFile.type};base64,${backBuf.toString('base64')}`;
+        } else if (formData.get('backBase64')) {
+          backImage = formData.get('backBase64')?.toString();
+        }
+      } catch (fmError: any) {
+        console.error('❌ [API] Failed to parse multipart form-data:', fmError);
         return NextResponse.json(
-          { 
+          {
             success: false,
-            error: 'Request timeout - Dateien sind möglicherweise zu groß',
-            code: 'REQUEST_TIMEOUT'
+            error: 'Ungültiges Multipart-Formular oder Dateiübertragung fehlgeschlagen',
+            code: 'INVALID_MULTIPART',
+            details: process.env.NODE_ENV === 'development' ? fmError.message : undefined
           },
-          { status: 408 }
+          { status: 400 }
         );
       }
-      
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Ungültiges Request-Format. Bitte versuchen Sie es erneut.',
-          code: 'INVALID_REQUEST',
-          details: process.env.NODE_ENV === 'development' ? parseError.message : undefined
-        },
-        { status: 400 }
-      );
-    }
+    } else {
+      // Parse request body with extended timeout and better error handling for JSON payloads
+      let body: any;
+      try {
+        body = await Promise.race([
+          request.json(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), 30000)
+          )
+        ]);
+      } catch (parseError: any) {
+        console.error('❌ [API] Failed to parse request body:', parseError);
 
-    const { frontImage, backImage, userId } = body;
+        if (parseError.message === 'REQUEST_TIMEOUT') {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Request timeout - Dateien sind möglicherweise zu groß',
+              code: 'REQUEST_TIMEOUT'
+            },
+            { status: 408 }
+          );
+        }
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Ungültiges Request-Format. Bitte versuchen Sie es erneut.',
+            code: 'INVALID_REQUEST',
+            details: process.env.NODE_ENV === 'development' ? parseError.message : undefined
+          },
+          { status: 400 }
+        );
+      }
+
+      const parsed = body || {};
+      frontImage = parsed.frontImage;
+      backImage = parsed.backImage;
+      userId = parsed.userId;
+    }
 
     // STEP 1: Immediate validation (fail fast)
     if (!userId) {
