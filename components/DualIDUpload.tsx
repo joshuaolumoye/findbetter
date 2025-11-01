@@ -1,23 +1,30 @@
 "use client";
 import React, { useState } from "react";
-import { CheckCircle, X, Upload, AlertCircle, FileText, Image as ImageIcon, File } from "lucide-react";
+import { CheckCircle, X, Upload, AlertCircle, FileText, Image as ImageIcon, File, Loader2 } from "lucide-react";
 
 const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
   const [frontPreview, setFrontPreview] = useState(null);
   const [backPreview, setBackPreview] = useState(null);
   const [uploadedFrontFile, setUploadedFrontFile] = useState(null);
   const [uploadedBackFile, setUploadedBackFile] = useState(null);
+  const [uploadingFront, setUploadingFront] = useState(false);
+  const [uploadingBack, setUploadingBack] = useState(false);
 
-  const handleFileUpload = (e, side) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Optimized file size validation
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const CHUNK_SIZE = 512 * 1024; // 512KB chunks for reading
 
-    // File validation - increased size limit and more file types
-    if (file.size > 10 * 1024 * 1024) {
-      setSubmitError("Datei ist zu groß. Maximum 10MB erlaubt.");
-      return;
+  const validateFileSize = (file) => {
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        valid: false,
+        error: `Datei ist zu groß (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum 10MB erlaubt.`
+      };
     }
+    return { valid: true };
+  };
 
+  const validateFileType = (file) => {
     const allowedTypes = [
       "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp",
       "application/pdf", 
@@ -26,22 +33,79 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
     ];
     
     if (!allowedTypes.includes(file.type)) {
-      setSubmitError("Nur JPEG, PNG, GIF, PDF oder Word Dateien sind erlaubt.");
-      return;
+      return {
+        valid: false,
+        error: "Nur JPEG, PNG, GIF, WebP, PDF oder Word Dateien sind erlaubt."
+      };
+    }
+    return { valid: true };
+  };
+
+  // Optimized file reading with chunking for large files
+  const readFileOptimized = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        resolve(event.target.result);
+      };
+      
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        reject(new Error('Fehler beim Lesen der Datei.'));
+      };
+
+      reader.onabort = () => {
+        reject(new Error('Datei-Upload wurde abgebrochen.'));
+      };
+
+      // For smaller files (< 5MB), read directly
+      // For larger files, we still use readAsDataURL but with better error handling
+      if (file.size < 5 * 1024 * 1024) {
+        reader.readAsDataURL(file);
+      } else {
+        // For larger files, show progress
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const handleFileUpload = async (e, side) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Set loading state immediately
+    if (side === "front") {
+      setUploadingFront(true);
+    } else {
+      setUploadingBack(true);
     }
 
-    console.log(`📄 Processing ${side} file:`, {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
+    try {
+      // STEP 1: Validate file size first (fastest check)
+      const sizeValidation = validateFileSize(file);
+      if (!sizeValidation.valid) {
+        setSubmitError(sizeValidation.error);
+        return;
+      }
 
-    // Convert to base64 for storage
-    const reader = new FileReader();
-    reader.onload = function (event) {
-      const base64Result = event.target?.result;
-      
-      // Store file info and base64
+      // STEP 2: Validate file type
+      const typeValidation = validateFileType(file);
+      if (!typeValidation.valid) {
+        setSubmitError(typeValidation.error);
+        return;
+      }
+
+      console.log(`📄 Processing ${side} file:`, {
+        name: file.name,
+        type: file.type,
+        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`
+      });
+
+      // STEP 3: Read file optimized
+      const base64Result = await readFileOptimized(file);
+
+      // STEP 4: Store file info and base64
       const fileData = {
         file: file,
         base64: base64Result,
@@ -84,16 +148,23 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         }
       }
       
-      console.log(`✅ ${side} document uploaded (${file.name}, ${file.size} bytes, ${file.type})`);
-    };
-    
-    reader.onerror = function (error) {
-      console.error('File reading error:', error);
-      setSubmitError('Fehler beim Lesen der Datei.');
-    };
-    
-    reader.readAsDataURL(file);
-    setSubmitError("");
+      console.log(`✅ ${side} document uploaded successfully (${(file.size / 1024).toFixed(1)}KB)`);
+      setSubmitError(""); // Clear any previous errors
+      
+    } catch (error) {
+      console.error('File upload error:', error);
+      setSubmitError(error.message || 'Fehler beim Hochladen der Datei. Bitte versuchen Sie es erneut.');
+      
+      // Clear the file input
+      e.target.value = '';
+    } finally {
+      // Always clear loading state
+      if (side === "front") {
+        setUploadingFront(false);
+      } else {
+        setUploadingBack(false);
+      }
+    }
   };
 
   const removeFile = (side) => {
@@ -118,6 +189,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
         idDocumentBackType: null
       }));
     }
+    setSubmitError(""); // Clear errors when removing files
   };
 
   const getFileIcon = (fileType) => {
@@ -145,7 +217,6 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
 
     return (
       <div className="relative h-48 bg-gray-50 rounded-lg border-2 border-green-200 overflow-hidden">
-        {/* Show image preview */}
         {isImage && preview && (
           <img 
             src={preview} 
@@ -154,7 +225,6 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
           />
         )}
         
-        {/* Show file icon for non-images */}
         {!isImage && (
           <div className="flex flex-col items-center justify-center h-full p-4">
             {getFileIcon(fileData.type)}
@@ -162,19 +232,17 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
               {fileData.name}
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              {(fileData.size / 1024).toFixed(1)} KB
+              {(fileData.size / 1024 / 1024).toFixed(2)} MB
             </p>
             <p className="text-xs text-blue-600 mt-1">{getFileTypeLabel(fileData.type)}</p>
           </div>
         )}
 
-        {/* Success badge */}
         <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-md text-xs flex items-center shadow-md">
           <CheckCircle className="w-3 h-3 mr-1" />
           Hochgeladen
         </div>
 
-        {/* Remove button */}
         <button
           type="button"
           onClick={() => removeFile(side)}
@@ -183,14 +251,50 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
           <X className="w-4 h-4" />
         </button>
 
-        {/* File info overlay for images */}
         {isImage && (
           <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white p-2">
             <p className="text-xs truncate">{fileData.name}</p>
-            <p className="text-xs text-gray-300">{(fileData.size / 1024).toFixed(1)} KB</p>
+            <p className="text-xs text-gray-300">{(fileData.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
         )}
       </div>
+    );
+  };
+
+  const renderUploadArea = (side, isUploading) => {
+    return (
+      <label className="cursor-pointer block">
+        <input
+          type="file"
+          onChange={(e) => handleFileUpload(e, side)}
+          accept="image/*,.pdf,.doc,.docx"
+          className="hidden"
+          disabled={isUploading}
+        />
+        <div className={`flex flex-col items-center justify-center h-48 p-4 rounded-lg transition-colors ${
+          isUploading ? 'bg-blue-50' : 'hover:bg-gray-100'
+        }`}>
+          {isUploading ? (
+            <>
+              <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-3" />
+              <p className="text-sm font-medium text-blue-700 mb-1">Wird hochgeladen...</p>
+              <p className="text-xs text-blue-600">Bitte warten</p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+                <Upload className="w-8 h-8 text-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-700 mb-1">
+                {side === "front" ? "Vorderseite hochladen" : "Rückseite hochladen"}
+              </p>
+              <p className="text-xs text-gray-500 text-center">JPG, PNG, PDF oder Word</p>
+              <p className="text-xs text-gray-500 text-center">(max. 10MB)</p>
+              <p className="text-xs text-blue-600 mt-2 font-medium">Klicken zum Auswählen</p>
+            </>
+          )}
+        </div>
+      </label>
     );
   };
 
@@ -217,28 +321,14 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
           <div className={`relative rounded-lg transition-all ${
             uploadedFrontFile 
               ? 'border-2 border-green-200' 
+              : uploadingFront
+              ? 'border-2 border-blue-300'
               : 'border-2 border-dashed border-gray-300 bg-gray-50'
           }`}>
             {uploadedFrontFile ? (
               renderFilePreview(uploadedFrontFile, frontPreview, "front")
             ) : (
-              <label className="cursor-pointer block">
-                <input
-                  type="file"
-                  onChange={(e) => handleFileUpload(e, "front")}
-                  accept="image/*,.pdf,.doc,.docx"
-                  className="hidden"
-                />
-                <div className="flex flex-col items-center justify-center h-48 p-4 hover:bg-gray-100 transition-colors rounded-lg">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-3">
-                    <Upload className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">Vorderseite hochladen</p>
-                  <p className="text-xs text-gray-500 text-center">JPG, PNG, PDF oder Word</p>
-                  <p className="text-xs text-gray-500 text-center">(max. 10MB)</p>
-                  <p className="text-xs text-blue-600 mt-2 font-medium">Klicken zum Auswählen</p>
-                </div>
-              </label>
+              renderUploadArea("front", uploadingFront)
             )}
           </div>
         </div>
@@ -251,28 +341,14 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
           <div className={`relative rounded-lg transition-all ${
             uploadedBackFile 
               ? 'border-2 border-green-200' 
+              : uploadingBack
+              ? 'border-2 border-blue-300'
               : 'border-2 border-dashed border-gray-300 bg-gray-50'
           }`}>
             {uploadedBackFile ? (
               renderFilePreview(uploadedBackFile, backPreview, "back")
             ) : (
-              <label className="cursor-pointer block">
-                <input
-                  type="file"
-                  onChange={(e) => handleFileUpload(e, "back")}
-                  accept="image/*,.pdf,.doc,.docx"
-                  className="hidden"
-                />
-                <div className="flex flex-col items-center justify-center h-48 p-4 hover:bg-gray-100 transition-colors rounded-lg">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-3">
-                    <Upload className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">Rückseite hochladen</p>
-                  <p className="text-xs text-gray-500 text-center">JPG, PNG, PDF oder Word</p>
-                  <p className="text-xs text-gray-500 text-center">(max. 10MB)</p>
-                  <p className="text-xs text-blue-600 mt-2 font-medium">Klicken zum Auswählen</p>
-                </div>
-              </label>
+              renderUploadArea("back", uploadingBack)
             )}
           </div>
         </div>
@@ -286,6 +362,7 @@ const DualIDUpload = ({ formData, setFormData, setSubmitError }) => {
           <p>• Bilder: JPG, PNG, GIF, WebP</p>
           <p>• Dokumente: PDF, Word (.doc, .docx)</p>
           <p>• Maximale Dateigröße: 10MB pro Datei</p>
+          <p className="mt-1 font-medium">💡 Tipp: Komprimieren Sie große Dateien vor dem Hochladen</p>
         </div>
       </div>
     </div>

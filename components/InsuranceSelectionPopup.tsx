@@ -199,223 +199,241 @@ const InsuranceSelectionPopup = ({
     return match ? match[1].trim() : "";
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Updated handleSubmit function for InsuranceSelectionPopup component
 
-    if (!validateForm()) {
-      setSubmitError(
-        "Bitte korrigieren Sie die Fehler in den markierten Feldern."
-      );
-      return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!validateForm()) {
+    setSubmitError(
+      "Bitte korrigieren Sie die Fehler in den markierten Feldern."
+    );
+    return;
+  }
+
+  setSubmitting(true);
+  setSubmitError("");
+  setCurrentStep("processing");
+
+  try {
+    const postalCode =
+      searchCriteria?.plz || extractPostalCode(formData.address, "8001");
+    const city = extractCity(formData.address) || formData.street;
+    const isNewToSwitzerland = searchCriteria?.newToSwitzerland === true;
+
+    // STEP 1: Create user payload
+    const userPayload = {
+      salutation: formData.salutation,
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: formData.phone.trim(),
+      birthDate: formData.birthDate,
+      address: formData.address.trim(),
+      street: formData.street.trim(),
+      postalCode: postalCode,
+      city: city || formData.street.trim(),
+      nationality: formData.nationality.trim() || "swiss",
+      ahvNumber: isNewToSwitzerland
+        ? null
+        : formData.ahvNumber.trim() || null,
+      oldInsurer: isNewToSwitzerland ? "" : (formData.oldInsurer || ""),
+      currentInsurancePolicyNumber:
+        formData.currentPolicyNumber.trim() || null,
+      insuranceStartDate: formData.insuranceStartDate,
+      interestedInConsultation: formData.consultationInterest,
+
+      searchCriteria: {
+        postalCode: searchCriteria?.plz || postalCode,
+        birthDate: searchCriteria?.geburtsdatum || formData.birthDate,
+        franchise: searchCriteria?.franchise || "300",
+        accidentCoverage:
+          searchCriteria?.unfalldeckung || "Mit Unfalldeckung",
+        currentModel: searchCriteria?.aktuellesModell || "Standard",
+        currentInsurer: formData.currentInsurer,
+        oldInsurer: isNewToSwitzerland ? "" : formData.oldInsurer,
+        newToSwitzerland: isNewToSwitzerland,
+      },
+
+      selectedInsurance: {
+        insurer:
+          selectedInsurance?.Insurer ||
+          selectedInsurance?.insurerName ||
+          formData.currentInsurer ||
+          "Unknown",
+        tariffName:
+          selectedInsurance?.["Tariff name"] ||
+          selectedInsurance?.tariff ||
+          "Standard",
+        premium:
+          parseFloat(
+            String(
+              selectedInsurance?.premium || selectedInsurance?.Praemie || 0
+            )
+          ) || 0,
+        franchise: String(
+          selectedInsurance?.Franchise || searchCriteria?.franchise || "300"
+        ),
+        accidentInclusion:
+          selectedInsurance?.["Accident Inclusion"] ||
+          searchCriteria?.unfalldeckung ||
+          "Mit Unfalldeckung",
+        ageGroup: selectedInsurance?.["Age group"] || "Adult",
+        region: selectedInsurance?.Region || "CH",
+        fiscalYear: String(selectedInsurance?.["Fiscal year"] || "2025"),
+      },
+
+      compliance: {
+        informationArt45: formData.informationArt45,
+        agbAccepted: true,
+        mandateAccepted: formData.mandateAccepted,
+        terminationAuthority: formData.terminationAuthority,
+        consultationInterest: formData.consultationInterest,
+      },
+    };
+
+    console.log("✅ [SUBMIT] Step 1: Payload prepared");
+
+    // STEP 2: Save user to database
+    console.log("📄 [SUBMIT] Step 2: Saving user to database...");
+    
+    const userResponse = await fetch("/api/users", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(userPayload),
+    });
+
+    if (!userResponse.ok) {
+      const errorData = await userResponse.json();
+      throw new Error(errorData.error || "Failed to save user data");
     }
 
-    setSubmitting(true);
-    setSubmitError("");
-    setCurrentStep("processing");
+    const { userId } = await userResponse.json();
+    console.log("✅ [SUBMIT] User saved with ID:", userId);
 
-    try {
-      const postalCode =
-        searchCriteria?.plz || extractPostalCode(formData.address, "8001");
-      const city = extractCity(formData.address) || formData.street;
+    // STEP 3: Upload ID documents (CRITICAL - Must succeed or fail)
+    if (formData.idDocumentFrontBase64 && formData.idDocumentBackBase64) {
+      console.log("📄 [SUBMIT] Step 3: Uploading ID documents...");
 
-      // ✅ Determine if user is new to Switzerland
-      const isNewToSwitzerland = searchCriteria?.newToSwitzerland === true;
+      try {
+        const uploadResponse = await fetch("/api/upload/dual-documents", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            frontImage: formData.idDocumentFrontBase64,
+            backImage: formData.idDocumentBackBase64,
+            userId: userId.toString(),
+          }),
+        });
 
-      console.log('🔹 User submission details:', {
-        isNewToSwitzerland,
-        oldInsurer: isNewToSwitzerland ? null : formData.oldInsurer,
-        newInsurer: formData.currentInsurer,
-        insuranceStartDate: formData.insuranceStartDate
-      });
+        const uploadResult = await uploadResponse.json();
 
-      const userPayload = {
-        salutation: formData.salutation,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
-        birthDate: formData.birthDate,
-        address: formData.address.trim(),
-        street: formData.street.trim(),
-        postalCode: postalCode,
-        city: city || formData.street.trim(),
-        nationality: formData.nationality.trim() || "swiss",
-        ahvNumber: isNewToSwitzerland
-          ? null
-          : formData.ahvNumber.trim() || null,
-        oldInsurer: isNewToSwitzerland ? "" : (formData.oldInsurer || ""), // ✅ Empty for new-to-Switzerland
-        currentInsurancePolicyNumber:
-          formData.currentPolicyNumber.trim() || null,
-        insuranceStartDate: formData.insuranceStartDate,
-        interestedInConsultation: formData.consultationInterest,
-
-        searchCriteria: {
-          postalCode: searchCriteria?.plz || postalCode,
-          birthDate: searchCriteria?.geburtsdatum || formData.birthDate,
-          franchise: searchCriteria?.franchise || "300",
-          accidentCoverage:
-            searchCriteria?.unfalldeckung || "Mit Unfalldeckung",
-          currentModel: searchCriteria?.aktuellesModell || "Standard",
-          currentInsurer: formData.currentInsurer, // ✅ NEW INSURER
-          oldInsurer: isNewToSwitzerland ? "" : formData.oldInsurer, // ✅ Empty for new-to-Switzerland
-          newToSwitzerland: isNewToSwitzerland,
-        },
-
-        selectedInsurance: {
-          insurer:
-            selectedInsurance?.Insurer ||
-            selectedInsurance?.insurerName ||
-            formData.currentInsurer ||
-            "Unknown",
-          tariffName:
-            selectedInsurance?.["Tariff name"] ||
-            selectedInsurance?.tariff ||
-            "Standard",
-          premium:
-            parseFloat(
-              String(
-                selectedInsurance?.premium || selectedInsurance?.Praemie || 0
-              )
-            ) || 0,
-          franchise: String(
-            selectedInsurance?.Franchise || searchCriteria?.franchise || "300"
-          ),
-          accidentInclusion:
-            selectedInsurance?.["Accident Inclusion"] ||
-            searchCriteria?.unfalldeckung ||
-            "Mit Unfalldeckung",
-          ageGroup: selectedInsurance?.["Age group"] || "Adult",
-          region: selectedInsurance?.Region || "CH",
-          fiscalYear: String(selectedInsurance?.["Fiscal year"] || "2025"),
-        },
-
-        compliance: {
-          informationArt45: formData.informationArt45,
-          agbAccepted: true,
-          mandateAccepted: formData.mandateAccepted,
-          terminationAuthority: formData.terminationAuthority,
-          consultationInterest: formData.consultationInterest,
-        },
-      };
-
-      console.log("✅ Payload prepared:", {
-        isNewToSwitzerland,
-        oldInsurer: userPayload.oldInsurer,
-        currentInsurer: userPayload.searchCriteria.currentInsurer,
-        selectedInsurer: userPayload.selectedInsurance.insurer,
-      });
-
-      const userResponse = await fetch("/api/users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userPayload),
-      });
-
-      if (!userResponse.ok) {
-        const errorData = await userResponse.json();
-        throw new Error(errorData.error || "Failed to save user data");
-      }
-
-      const { userId } = await userResponse.json();
-      console.log("✅ User saved to database with ID:", userId);
-
-      if (formData.idDocumentFrontBase64 || formData.idDocumentBackBase64) {
-        console.log("STEP 2: Uploading ID documents...");
-
-        try {
-          const uploadResponse = await fetch("/api/upload/dual-documents", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              frontImage: formData.idDocumentFrontBase64,
-              backImage: formData.idDocumentBackBase64,
-              userId: userId.toString(),
-            }),
-          });
-
-          if (uploadResponse.ok) {
-            const uploadResult = await uploadResponse.json();
-            console.log("✅ ID documents uploaded:", uploadResult.files);
-          } else {
-            console.warn("⚠️ ID document upload failed (non-blocking)");
+        // CRITICAL: Check if upload actually succeeded
+        if (!uploadResponse.ok || !uploadResult.success) {
+          const errorMsg = uploadResult.error || "Document upload failed";
+          console.error("❌ [SUBMIT] ID document upload failed:", errorMsg);
+          
+          // Provide user-friendly error messages
+          let userErrorMsg = "Fehler beim Hochladen der ID-Dokumente.";
+          
+          if (errorMsg.includes('too large')) {
+            userErrorMsg = "Ihre Dokumente sind zu groß. Bitte komprimieren Sie die Dateien auf unter 10MB und versuchen Sie es erneut.";
+          } else if (errorMsg.includes('timeout')) {
+            userErrorMsg = "Upload-Timeout. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.";
+          } else if (errorMsg.includes('Invalid')) {
+            userErrorMsg = "Ungültiges Dateiformat. Bitte verwenden Sie nur JPG, PNG, PDF oder Word-Dateien.";
           }
-        } catch (uploadError) {
-          console.warn(
-            "⚠️ ID document upload error (non-blocking):",
-            uploadError
-          );
+          
+          throw new Error(userErrorMsg);
         }
+
+        console.log("✅ [SUBMIT] ID documents uploaded:", uploadResult.files);
+
+      } catch (uploadError) {
+        console.error("❌ [SUBMIT] Upload error:", uploadError);
+        
+        // Re-throw the error to stop the submission process
+        throw new Error(
+          uploadError.message || 
+          "Fehler beim Hochladen der ID-Dokumente. Bitte versuchen Sie es erneut."
+        );
       }
-
-      console.log("STEP 3: Processing Skribble documents...");
-
-      const skribblePayload = {
-        userId: userId,
-        userData: userPayload,
-        selectedInsurance: userPayload.selectedInsurance,
-        searchCriteria: userPayload.searchCriteria,
-        compliance: userPayload.compliance,
-        newToSwitzerland: isNewToSwitzerland, // ✅ Pass the flag
-      };
-
-      console.log("📄 Skribble payload:", {
-        userId,
-        isNewToSwitzerland,
-        oldInsurer: userPayload.oldInsurer,
-        hasOldInsurer: !!userPayload.oldInsurer
-      });
-
-      const skribbleResponse = await fetch("/api/skribble/create-documents", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(skribblePayload),
-      });
-
-      if (!skribbleResponse.ok) {
-        const errorData = await skribbleResponse.json();
-        throw new Error(errorData.error || "Failed to create documents");
-      }
-
-      const result = await skribbleResponse.json();
-      console.log("✅ Documents created successfully:", result);
-
-      sessionStorage.setItem(
-        "skribble_session",
-        JSON.stringify({
-          userId: userId,
-          sessionId: result.sessionId,
-          documentIds: [result.documentId, result.applicationDocumentId],
-          timestamp: Date.now(),
-        })
-      );
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      window.location.href = "/success";
-    } catch (error) {
-      console.error("❌ Submission error:", error);
-
-      let errorMessage = "Ein unerwarteter Fehler ist aufgetreten.";
-
-      if (error.message.includes("existiert bereits")) {
-        errorMessage = "Ein Benutzer mit dieser E-Mail existiert bereits.";
-      } else if (error.message.includes("timeout")) {
-        errorMessage = "Anfrage-Timeout. Bitte versuchen Sie es erneut.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      setSubmitError(errorMessage);
-      setCurrentStep("form");
-    } finally {
-      setSubmitting(false);
+    } else {
+      console.log("ℹ️ [SUBMIT] No ID documents to upload");
     }
-  };
+
+    // STEP 4: Create Skribble documents (only after successful upload)
+    console.log("📄 [SUBMIT] Step 4: Creating Skribble documents...");
+
+    const skribblePayload = {
+      userId: userId,
+      userData: userPayload,
+      selectedInsurance: userPayload.selectedInsurance,
+      searchCriteria: userPayload.searchCriteria,
+      compliance: userPayload.compliance,
+      newToSwitzerland: isNewToSwitzerland,
+    };
+
+    const skribbleResponse = await fetch("/api/skribble/create-documents", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(skribblePayload),
+    });
+
+    if (!skribbleResponse.ok) {
+      const errorData = await skribbleResponse.json();
+      throw new Error(errorData.error || "Failed to create documents");
+    }
+
+    const result = await skribbleResponse.json();
+    console.log("✅ [SUBMIT] Documents created successfully:", result);
+
+    // Save session data
+    sessionStorage.setItem(
+      "skribble_session",
+      JSON.stringify({
+        userId: userId,
+        sessionId: result.sessionId,
+        documentIds: [result.documentId, result.applicationDocumentId],
+        timestamp: Date.now(),
+      })
+    );
+
+    // Small delay before redirect
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    console.log("✅ [SUBMIT] All steps completed successfully!");
+    window.location.href = "/success";
+
+  } catch (error) {
+    console.error("❌ [SUBMIT] Submission error:", error);
+
+    let errorMessage = "Ein unerwarteter Fehler ist aufgetreten.";
+
+    if (error.message.includes("existiert bereits")) {
+      errorMessage = "Ein Benutzer mit dieser E-Mail existiert bereits.";
+    } else if (error.message.includes("timeout")) {
+      errorMessage = "Anfrage-Timeout. Bitte versuchen Sie es erneut.";
+    } else if (error.message.includes("zu groß") || error.message.includes("too large")) {
+      errorMessage = "Ihre Dokumente sind zu groß. Bitte komprimieren Sie die Dateien auf unter 10MB.";
+    } else if (error.message.includes("Hochladen") || error.message.includes("upload")) {
+      errorMessage = error.message; // Use the specific upload error message
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    setSubmitError(errorMessage);
+    setCurrentStep("form");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const handleClose = () => {
     if (submitSuccess) {
