@@ -1,5 +1,7 @@
 // services/SkribbleService.ts - FIXED Visual Signature Page Issue
 import { PDFTemplateManager } from './PDFTemplateManager';
+import fs from 'fs';
+import path from 'path';
 
 interface SkribbleConfig {
   apiKey: string;
@@ -14,6 +16,7 @@ export class SkribbleService {
   private pdfManager: PDFTemplateManager;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  public expressJsData: Record<string, any> = {};
 
   constructor(config: SkribbleConfig) {
     this.config = {
@@ -21,7 +24,7 @@ export class SkribbleService {
       baseUrl: config.baseUrl || 'https://api.skribble.com'
     };
     this.pdfManager = new PDFTemplateManager();
-    
+
     console.log('Initializing Skribble service with SES support:', {
       environment: this.config.environment,
       baseUrl: this.config.baseUrl,
@@ -31,12 +34,42 @@ export class SkribbleService {
     });
   }
 
+
+
+  // send payload to new server
+  private async sendToExpress(payload: any): Promise<void> {
+    if (!process.env.EXPRESS_BASE_URL) {
+      console.warn('EXPRESS_BASE_URL not set. Skipping sending to Express.');
+      return;
+    }
+    console.log("Payload to Express:", JSON.stringify(payload, null, 2));
+    try {
+      const res = await fetch(`${process.env.EXPRESS_BASE_URL}/api/signing-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      console.log("\n\n==== SENDING TO EXPRESS ====\n\n")
+
+      if (!res.ok) {
+        const errorData = await res.text();
+        console.error('Failed to send signing request to Express:', errorData);
+      } else {
+        console.log('✅ Payload sent to Express backend successfully');
+      }
+    } catch (err) {
+      console.error('Error sending signing request to Express:', err);
+    }
+  }
+
+
   /**
    * Username + API Key authentication
    */
   private async login(): Promise<string> {
     console.log('Authenticating with Skribble...');
-    
+
     try {
       const authUrl = `${this.config.baseUrl}/v2/access/login`;
 
@@ -66,7 +99,7 @@ export class SkribbleService {
 
       const errorText = await response.text();
       throw new Error(`Authentication failed: ${response.status} - ${errorText}`);
-      
+
     } catch (error) {
       console.error('Authentication error:', error);
       throw new Error(`Failed to authenticate with Skribble: ${error.message}`);
@@ -95,148 +128,184 @@ export class SkribbleService {
   /**
    * Process Swiss insurance switch using SES (Simple Electronic Signature)
    */
-  async processSwissInsuranceSwitch(userData: any, selectedInsurance: any, isNewToSwitzerland: boolean = false): Promise<any> {
+  /**
+ * Process Swiss insurance switch using SES (Simple Electronic Signature)
+ */
+  async processSwissInsuranceSwitch(
+    userData: any,
+    selectedInsurance: any,
+    isNewToSwitzerland: boolean = false
+  ): Promise<any> {
     try {
-      console.log('Processing Swiss insurance switch:', {
+      console.log("Processing Swiss insurance switch:", {
         userName: `${userData.firstName} ${userData.lastName}`,
         isNewToSwitzerland,
-        willGenerateCancellation: !isNewToSwitzerland
+        willGenerateCancellation: !isNewToSwitzerland,
       });
-      
+
+      // Generate session ID
+      const sessionId = `session_${Date.now()}`;
+      this.expressJsData.sessionId = sessionId;
+      this.expressJsData.isNewToSwitzerland = isNewToSwitzerland;
+      console.log("🧩 Session initialized for Express:", this.expressJsData);
+
       // Validate user data
       if (!userData?.firstName || !userData?.lastName) {
-        throw new Error('Invalid user data: Missing name information');
+        throw new Error("Invalid user data: Missing name information");
       }
-      
       if (!userData?.email) {
-        throw new Error('Invalid user data: Missing email');
+        throw new Error("Invalid user data: Missing email");
       }
-      
+
       // Validate insurance data
       if (!selectedInsurance?.insurer) {
-        throw new Error('Invalid insurance data: Missing insurer information');
+        throw new Error("Invalid insurance data: Missing insurer information");
       }
-      console.log('Starting Swiss KVG insurance process with SES (Simple Electronic Signature)...');
-      
+
+      console.log(
+        "Starting Swiss KVG insurance process with SES (Simple Electronic Signature)..."
+      );
+
       // Validate Swiss requirements
       this.validateSwissRequirements(userData, selectedInsurance);
 
-      console.log('Document generation strategy:', {
+      console.log("Document generation strategy:", {
         isNewToSwitzerland,
         willGenerateCancellation: !isNewToSwitzerland,
-        willGenerateApplication: true
+        willGenerateApplication: true,
       });
 
       // Get access token
       const accessToken = await this.getAccessToken();
 
-      // Validate and adjust data for new-to-Switzerland users
+      // Adjust data for new-to-Switzerland users
       if (isNewToSwitzerland) {
-        console.log('Processing for new-to-Switzerland user');
+        console.log("Processing for new-to-Switzerland user");
         userData = {
           ...userData,
-          oldInsurer: '', // No previous insurer
-          insuranceStartDate: userData.insuranceStartDate || '2025-12-03' // Default start date for new residents
+          oldInsurer: "",
+          insuranceStartDate: userData.insuranceStartDate || "2025-12-03",
         };
       }
 
-      // Generate PDFs based on user status
-      console.log('Generating KVG documents...');
-      console.log('🔹 Insurance data for PDF generation:', {
+      // Generate PDFs
+      console.log("Generating KVG documents...");
+      console.log("🔹 Insurance data for PDF generation:", {
         isNewToSwitzerland,
-        oldInsurer: userData.oldInsurer || 'None', // Should be empty for new-to-Switzerland
-        currentInsurer: userData.currentInsurer, // NEW insurer selected
-        selectedInsurer: selectedInsurance.insurer, // NEW insurer from quote
-        insuranceStartDate: userData.insuranceStartDate
+        oldInsurer: userData.oldInsurer || "None",
+        currentInsurer: userData.currentInsurer,
+        selectedInsurer: selectedInsurance.insurer,
+        insuranceStartDate: userData.insuranceStartDate,
       });
 
-      // Only generate application PDF for new-to-Switzerland users
-      console.log(`Generating ${isNewToSwitzerland ? 'only application PDF' : 'both PDFs'}...`);
-      const applicationPdf = await this.pdfManager.generateInsuranceApplicationPDF(userData, selectedInsurance);
+      const applicationPdf = await this.pdfManager.generateInsuranceApplicationPDF(
+        userData,
+        selectedInsurance
+      );
       let cancellationPdf = null;
 
-      // Generate cancellation PDF only for existing Swiss residents
       if (!isNewToSwitzerland && userData.oldInsurer) {
-        cancellationPdf = await this.pdfManager.generateCancellationPDF(userData, userData.oldInsurer);
+        cancellationPdf = await this.pdfManager.generateCancellationPDF(
+          userData,
+          userData.oldInsurer
+        );
       }
 
-      console.log('PDFs generated successfully, creating Skribble SES signature requests...');
+      console.log(
+        "PDFs generated successfully, creating Skribble SES signature requests..."
+      );
 
-      // Create signature requests based on user status
+      // Create signature requests
       let signatureRequests;
-      
+
       if (isNewToSwitzerland || !userData.oldInsurer) {
-        // For new to Switzerland or users without previous insurance
-        console.log('Creating application-only signature request...');
-        console.log('Reason:', isNewToSwitzerland ? 'New to Switzerland' : 'No previous insurance');
-        
+        console.log("Creating application-only signature request...");
         const applicationRequest = await this.createSESSignatureRequest({
           title: `Krankenversicherungsantrag - ${userData.firstName} ${userData.lastName}`,
-          message: isNewToSwitzerland 
-            ? 'Please sign your initial Swiss insurance application'
-            : 'Please sign your new insurance application',
-          content: applicationPdf.toString('base64'),
+          message: isNewToSwitzerland
+            ? "Please sign your initial Swiss insurance application"
+            : "Please sign your new insurance application",
+          content: applicationPdf.toString("base64"),
           signerEmail: userData.email,
-          accessToken
+          accessToken,
         });
-        
+
         signatureRequests = {
           application: applicationRequest,
-          cancellation: null
+          cancellation: null,
         };
       } else {
-        // For existing Swiss residents with previous insurance
-        console.log('Creating both signature requests for insurance switch...');
+        console.log("Creating both signature requests for insurance switch...");
         signatureRequests = await this.createBothSESSignatureRequests({
           cancellationPdf,
           applicationPdf,
           userData,
           selectedInsurance,
-          accessToken
+          accessToken,
         });
       }
 
-      console.log('Signature requests created successfully');
+      console.log("Signature requests created successfully");
 
-      // Generate session ID
-      const sessionId = `session_${Date.now()}`;
-
-      // Return the signing URLs based on user status
-      const response = {
+      // Build response object
+      const response: any = {
         success: true,
-        sessionId: sessionId,
-        signatureStandard: 'SES',
+        sessionId,
+        signatureStandard: "SES",
         applicationDocumentId: signatureRequests.application.requestId,
         applicationSigningUrl: signatureRequests.application.signingUrl,
         userEmail: userData.email,
-        isNewToSwitzerland: isNewToSwitzerland,
+        isNewToSwitzerland,
         insuranceStartDate: userData.insuranceStartDate,
         selectedInsurer: selectedInsurance.insurer,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        mode: 'ses',
-        documentType: isNewToSwitzerland ? 'application_only' : 'full_switch',
+        expiresAt: new Date(
+          Date.now() + 30 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        mode: "ses",
+        documentType: isNewToSwitzerland ? "application_only" : "full_switch",
         instructions: isNewToSwitzerland
-          ? 'You will receive an email invitation to sign your new insurance application.'
-          : 'You will receive email invitations to sign both the cancellation and application documents.'
+          ? "You will receive an email invitation to sign your new insurance application."
+          : "You will receive email invitations to sign both the cancellation and application documents.",
       };
 
-      // Only include cancellation data if it exists
+      // Add cancellation info if it exists
       if (signatureRequests.cancellation) {
-        return {
-          ...response,
-          cancellationDocumentId: signatureRequests.cancellation.requestId,
-          cancellationSigningUrl: signatureRequests.cancellation.signingUrl,
-          currentInsurer: userData.currentInsurer,
-        };
+        response.cancellationDocumentId = signatureRequests.cancellation.requestId;
+        response.cancellationSigningUrl =
+          signatureRequests.cancellation.signingUrl;
+        response.currentInsurer = userData.currentInsurer;
       }
 
+      // ✅ Send consolidated info to Express (always, before returning)
+      try {
+        const signingUrl = signatureRequests?.application.signingUrl || "";
+        const documentId = signingUrl.split("/view/")[1]?.split("/")[0];
+
+        const expressPayload = {
+          userName: `${userData.firstName} ${userData.lastName}`,
+          userEmail: userData.email,
+          sessionId,
+          applicationDocumentId: documentId,
+          signingUrl: signatureRequests.application.signingUrl,
+          isNewToSwitzerland,
+          documentType: isNewToSwitzerland ? "application_only" : "full_switch",
+        };
+
+        await this.sendToExpress(expressPayload);
+        console.log("✅ Sent consolidated signing info to Express once");
+      } catch (err) {
+        console.error("❌ Failed to send consolidated signing info to Express:", err);
+      }
+
+      // ✅ Return once — at the end
       return response;
 
     } catch (error) {
-      console.error('Error processing Swiss insurance switch with Skribble SES:', error);
+      console.error("Error processing Swiss insurance switch with Skribble SES:", error);
       throw new Error(`Failed to process KVG insurance switch: ${error.message}`);
     }
   }
+
 
   /**
    * Create both signature requests with SES
@@ -251,7 +320,7 @@ export class SkribbleService {
     cancellation: { requestId: string; signingUrl: string } | null;
     application: { requestId: string; signingUrl: string };
   }> {
-    
+
     console.log('Creating signature requests...');
 
     try {
@@ -299,7 +368,7 @@ export class SkribbleService {
     signerEmail: string;
     accessToken: string;
   }): Promise<{ requestId: string; signingUrl: string }> {
-    
+
     console.log(`Creating Skribble SES signature request: ${params.title}`);
 
     try {
@@ -321,11 +390,14 @@ export class SkribbleService {
           }
         ],
         quality: "SES",
-        legislation: "ZERTES"
+        legislation: "ZERTES",
+
+        callback_url: 'https://abcd1234.ngrok.io/api/skribble/webhook',
+        event_types: ['signature_request.completed'] // only notify on completion
       };
 
-      console.log('Sending SES signature request to Skribble:', { 
-        url: signatureUrl, 
+      console.log('Sending SES signature request to Skribble:', {
+        url: signatureUrl,
         title: params.title,
         signerEmail: params.signerEmail,
         contentSize: params.content.length,
@@ -350,7 +422,7 @@ export class SkribbleService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('SES signature request error response:', errorText);
-        
+
         // Try to parse error as JSON for more details
         try {
           const errorJson = JSON.parse(errorText);
@@ -358,7 +430,7 @@ export class SkribbleService {
         } catch (e) {
           console.error('Could not parse error as JSON');
         }
-        
+
         if (response.status === 401) {
           throw new Error('Skribble authentication failed - check API credentials');
         } else if (response.status === 413) {
@@ -370,7 +442,7 @@ export class SkribbleService {
         } else if (response.status === 500) {
           throw new Error('Skribble server error - please try again in a few minutes');
         }
-        
+
         throw new Error(`SES signature request failed: ${response.status} - ${errorText}`);
       }
 
@@ -386,25 +458,25 @@ export class SkribbleService {
 
       // Try multiple ways to extract the signing URL
       let sesSigningUrl = '';
-      
+
       // Method 1: Check signatures array (most common)
       if (result.signatures && result.signatures.length > 0) {
         sesSigningUrl = result.signatures[0].signing_url || '';
         console.log('Method 1 - Found signing URL in signatures[0]:', sesSigningUrl);
       }
-      
+
       // Method 2: Check top-level signing_url
       if (!sesSigningUrl && result.signing_url) {
         sesSigningUrl = result.signing_url;
         console.log('Method 2 - Found signing URL at top level:', sesSigningUrl);
       }
-      
+
       // Method 3: Check if there's a direct link or url field
       if (!sesSigningUrl && result.link) {
         sesSigningUrl = result.link;
         console.log('Method 3 - Found signing URL in link field:', sesSigningUrl);
       }
-      
+
       if (!sesSigningUrl && result.url) {
         sesSigningUrl = result.url;
         console.log('Method 4 - Found signing URL in url field:', sesSigningUrl);
@@ -418,7 +490,7 @@ export class SkribbleService {
           console.error('Signature object keys:', Object.keys(result.signatures[0]));
           console.error('Signature object:', result.signatures[0]);
         }
-        
+
         // For debugging: Return a mock URL in development
         if (this.config.environment === 'sandbox' && process.env.NODE_ENV === 'development') {
           console.warn('⚠️ Using mock signing URL for development/debugging');
@@ -434,6 +506,11 @@ export class SkribbleService {
       console.log(`   Signing URL: ${sesSigningUrl}`);
       console.log(`   Response contained: ${Object.keys(result).join(', ')}`);
 
+      const userEmail = result.signatures?.[0]?.signer_identity_data?.email_address || params.signerEmail;
+      const signingUrl = result.signatures?.[0]?.signing_url || result.signing_url || '';
+      const documentId = signingUrl.split('/view/')[1]?.split('/')[0];
+      const fullNameFromTitle = result.title?.split(' - ').pop()?.trim() || 'Unknown';
+
       return {
         requestId: result.id,
         signingUrl: sesSigningUrl
@@ -441,12 +518,12 @@ export class SkribbleService {
 
     } catch (error) {
       console.error('Error creating SES signature request:', error);
-      
+
       // Enhanced error message with more context
       if (error.message && error.message.includes('No signing URL')) {
         throw new Error(`Failed to create SES signature request: ${error.message}. This might indicate the signature request was created but Skribble's response format is different than expected. Check the logs for the full response structure.`);
       }
-      
+
       throw new Error(`Failed to create SES signature request: ${error.message}`);
     }
   }
@@ -460,19 +537,19 @@ export class SkribbleService {
     if (!userData.firstName || !userData.lastName) {
       errors.push('Vor- und Nachname sind erforderlich');
     }
-    
+
     if (!userData.email || !this.isValidEmail(userData.email)) {
       errors.push('Gültige E-Mail-Adresse erforderlich');
     }
-    
+
     if (!userData.currentInsurer) {
       errors.push('Aktuelle Krankenversicherung erforderlich');
     }
-    
+
     if (!selectedInsurance.insurer) {
       errors.push('Neue Versicherungsauswahl erforderlich');
     }
-    
+
     if (errors.length > 0) {
       throw new Error(`Swiss KVG validation failed: ${errors.join(', ')}`);
     }
@@ -487,7 +564,7 @@ export class SkribbleService {
    */
   async getDocumentStatus(documentId: string): Promise<any> {
     const accessToken = await this.getAccessToken();
-    
+
     const response = await fetch(`${this.config.baseUrl}/v2/signature-requests/${documentId}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -500,7 +577,7 @@ export class SkribbleService {
     }
 
     const result = await response.json();
-    
+
     console.log('Document status retrieved:', {
       documentId,
       status: result.status,
@@ -510,24 +587,78 @@ export class SkribbleService {
 
     return result;
   }
-
   /**
    * Handle Skribble webhook
    */
   async handleWebhook(payload: any, signature: string): Promise<any> {
-    console.log('Processing Skribble webhook:', {
-      eventType: payload.event_type,
-      documentId: payload.signature_request?.id,
-      signatureStandard: payload.signature_request?.signatures?.[0]?.signature_standard
-    });
-    
-    return { 
-      processed: true, 
-      action: payload.event_type || 'unknown',
-      documentId: payload.signature_request?.id,
-      signatureStandard: payload.signature_request?.signatures?.[0]?.signature_standard || 'unknown'
-    };
+    console.log('\n\n\n=========\n\n');
+    console.log('Processing Skribble webhook:', payload.event_type);
+    console.log('\n\n\n=========\n\n');
+
+    const eventType = payload.event_type;
+    const signatureRequestId = payload.signature_request?.id;
+    console.log('signatureRequestId: ', signatureRequestId);
+
+    if (eventType === 'signature_request.completed' && signatureRequestId) {
+      console.log(`✅ SignatureRequest ${signatureRequestId} completed. Fetching document ID...`);
+
+      try {
+        const accessToken = await this.getAccessToken();
+
+        // 1️⃣ Fetch the SignatureRequest to get the correct document_id
+        const srResponse = await fetch(`${this.config.baseUrl}/v2/signature-requests/${signatureRequestId}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'User-Agent': 'CompanioxApp/1.0'
+          }
+        });
+
+        if (!srResponse.ok) throw new Error(`Failed to fetch SignatureRequest: ${srResponse.status}`);
+
+        const srData = await srResponse.json();
+        const documentId = srData.document_id;
+
+        if (!documentId) throw new Error('Document ID not found in SignatureRequest');
+
+        console.log(`📄 Document ID retrieved: ${documentId}. Downloading signed PDF...`);
+
+        // 2️⃣ Download the actual signed PDF
+        const pdfResponse = await fetch(`${this.config.baseUrl}/v2/documents/${documentId}/content`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'User-Agent': 'CompanioxApp/1.0'
+          }
+        });
+
+        if (!pdfResponse.ok) throw new Error(`Download failed: ${pdfResponse.status}`);
+
+        const signedPdf = Buffer.from(await pdfResponse.arrayBuffer());
+
+        // 3️⃣ Ensure folder exists
+        const dir = path.join(process.cwd(), 'public', 'signed_docs');
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+          console.log(`📁 Created folder: ${dir}`);
+        }
+
+        // 4️⃣ Save PDF locally
+        const filePath = path.join(dir, `${documentId}.pdf`);
+        await fs.promises.writeFile(filePath, signedPdf);
+        console.log(`✅ Signed document saved at: ${filePath}`);
+
+        // Optionally update your DB
+        // await db.query('UPDATE insurance_quotes SET signed_doc_path = ? WHERE document_id = ?', [filePath, signatureRequestId]);
+
+        return { processed: true, action: eventType, signatureRequestId, documentId, storedAt: filePath };
+      } catch (err) {
+        console.error('Error fetching signed document:', err);
+        return { processed: false, error: err.message };
+      }
+    }
+
+    return { processed: true, action: eventType };
   }
+
 }
 
 /**
