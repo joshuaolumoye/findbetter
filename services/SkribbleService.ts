@@ -285,6 +285,7 @@ export class SkribbleService {
           userName: `${userData.firstName} ${userData.lastName}`,
           userEmail: userData.email,
           sessionId,
+          userId: userData?.userId || "NO USERID",
           applicationDocumentId: documentId,
           signingUrl: signatureRequests.application.signingUrl,
           isNewToSwitzerland,
