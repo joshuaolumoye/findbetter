@@ -290,6 +290,7 @@ export class SkribbleService {
           signingUrl: signatureRequests.application.signingUrl,
           isNewToSwitzerland,
           documentType: isNewToSwitzerland ? "application_only" : "full_switch",
+          cancellationPdf: cancellationPdf ? cancellationPdf.toString("base64") : null,
         };
 
         await this.sendToExpress(expressPayload);
