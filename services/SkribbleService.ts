@@ -290,11 +290,10 @@ export class SkribbleService {
           signingUrl: signatureRequests.application.signingUrl,
           isNewToSwitzerland,
           documentType: isNewToSwitzerland ? "application_only" : "full_switch",
-          cancellationPdf: cancellationPdf ? cancellationPdf.toString("base64") : null,
+          cancellationSigningUrl: cancellationPdf ? signatureRequests?.cancellation?.signingUrl : null,
         };
-
         await this.sendToExpress(expressPayload);
-        console.log("✅ Sent consolidated signing info to Express once");
+        console.log("Sent consolidated signing info to Express once");
       } catch (err) {
         console.error("❌ Failed to send consolidated signing info to Express:", err);
       }
