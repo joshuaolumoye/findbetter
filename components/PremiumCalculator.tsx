@@ -91,9 +91,30 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
     setRegionLoading(true);
     try {
       const response = await fetch(`/api/address/plz/${form.plz}`);
+      
+      if (!response.ok) {
+        console.error(`API Error: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Error details:", errorData);
+        setRegionData(null);
+        return null;
+      }
+      
       const data = await response.json();
-      setRegionData(data[0]);
-      return data;
+      console.log("API Response:", data);
+      
+      // Handle both array and single object responses
+      const regionData = Array.isArray(data) ? data[0] : data;
+      
+      if (regionData && typeof regionData === 'object') {
+        setRegionData(regionData);
+        console.log("Region data set:", regionData);
+        return regionData;
+      } else {
+        console.warn("Invalid region data format:", regionData);
+        setRegionData(null);
+        return null;
+      }
     } catch (error) {
       console.error("Error fetching region:", error);
       setRegionData(null);
@@ -387,7 +408,7 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
             <input
               type="text"
               id="plz"
-              value={regionData?.name ? regionData.name : form.plz}
+              value={form.plz}
               onChange={handleChange}
               placeholder="z.B. 8001"
               maxLength="4"
@@ -403,6 +424,11 @@ const PremiumCalculator = ({ onResults, onDebugInfo, onSearchCriteria, onAddPers
               </div>
             )}
           </div>
+          {regionData?.name && (
+            <p className="mt-2 text-sm text-green-600 flex items-center">
+              ✓ {regionData.name} ({form.plz})
+            </p>
+          )}
           {validationErrors.plz && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.plz}</p>
           )}
