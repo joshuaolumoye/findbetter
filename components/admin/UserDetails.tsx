@@ -123,15 +123,18 @@ export default function UserDetails({ user, onBack }: UserDetailsProps) {
     setSignedDocsLoading(true);
     setSignedDocsError('');
     try {
-      const url = `${EXPRESS_BASE}/api/get-all-documents`;
+      const url = `${EXPRESS_BASE}/express/api/get-all-documents`;
+      console.log('[UserDetails] Fetching signed documents for user', userId, 'from:', url);
       const res = await fetch(url, { method: 'GET' });
       if (!res.ok) {
         throw new Error(`Failed to fetch signed docs: ${res.status}`);
       }
       const body = await res.json();
+      console.log('[UserDetails] Response received:', body);
       const arr = Array.isArray(body.data) ? body.data : (body.data || []);
       const userDocs = arr.filter((d: any) => String(d.userId) === String(userId));
       setSignedDocuments(userDocs);
+      console.log('[UserDetails] Documents for user', userId, ':', userDocs);
     } catch (err) {
       console.error('Error fetching signed documents:', err);
       setSignedDocsError(err instanceof Error ? err.message : 'Failed to load signed documents');

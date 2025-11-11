@@ -44,7 +44,7 @@ export class SkribbleService {
     }
     console.log("Payload to Express:", JSON.stringify(payload, null, 2));
     try {
-      const res = await fetch(`${process.env.EXPRESS_BASE_URL}/api/signing-request`, {
+      const res = await fetch(`${process.env.EXPRESS_BASE_URL}/express/api/signing-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

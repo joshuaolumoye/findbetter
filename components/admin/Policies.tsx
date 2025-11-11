@@ -253,10 +253,12 @@ export default function Policies() {
     setDocsLoading(true);
     setDocsError('');
     try {
-      const url = `${EXPRESS_BASE}/api/get-all-documents`;
+      const url = `${EXPRESS_BASE}/express/api/get-all-documents`;
+      console.log('[Policies] Fetching signed documents from:', url);
       const res = await fetch(url, { method: 'GET' });
       if (!res.ok) throw new Error(`Failed to fetch signed docs: ${res.status}`);
       const body = await res.json();
+      console.log('[Policies] Response received:', body);
       const arr = Array.isArray(body.data) ? body.data : (body.data || []);
       const map: Record<string, any[]> = {};
       arr.forEach((d: any) => {
@@ -265,6 +267,7 @@ export default function Policies() {
         map[uid].push(d);
       });
       setSignedDocsMap(map);
+      console.log('[Policies] Documents map created:', map);
     } catch (err) {
       console.error('Error fetching signed documents:', err);
       setDocsError(err instanceof Error ? err.message : 'Failed to load signed documents');
