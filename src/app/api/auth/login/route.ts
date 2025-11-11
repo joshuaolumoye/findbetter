@@ -7,20 +7,23 @@ import { cookies } from 'next/headers';
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
+    // Normalize email to avoid simple casing/whitespace issues
+    const normalizedEmail = String(email || '').trim().toLowerCase();
     
     // Validate input
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
       );
     }
     
-    // Authenticate admin
-    const admin = await authenticateAdmin(email, password);
+    // Authenticate admin (use normalized email)
+    const admin = await authenticateAdmin(normalizedEmail, password);
     
     if (!admin) {
       // Use generic error message to prevent email enumeration
+      console.debug('Authentication failed for email:', normalizedEmail);
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }

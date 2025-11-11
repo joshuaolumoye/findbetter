@@ -217,6 +217,12 @@ export default function Policies() {
   const [sortBy, setSortBy] = useState<'date' | 'premium' | 'savings'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Signed documents fetched from the Express server (Skribble results)
+  const EXPRESS_BASE = (process.env.NEXT_PUBLIC_EXPRESS_BASE_URL as string) || 'http://localhost:3001';
+  const [signedDocsMap, setSignedDocsMap] = useState<Record<string, any>>({});
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState('');
+
   const fetchPolicies = async () => {
     setLoading(true);
     setError('');
@@ -242,8 +248,34 @@ export default function Policies() {
     }
   };
 
+  // Fetch signed documents from Express (Skribble results)
+  const fetchSignedDocuments = async () => {
+    setDocsLoading(true);
+    setDocsError('');
+    try {
+      const url = `${EXPRESS_BASE}/api/get-all-documents`;
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) throw new Error(`Failed to fetch signed docs: ${res.status}`);
+      const body = await res.json();
+      const arr = Array.isArray(body.data) ? body.data : (body.data || []);
+      const map: Record<string, any[]> = {};
+      arr.forEach((d: any) => {
+        const uid = String(d.userId);
+        if (!map[uid]) map[uid] = [];
+        map[uid].push(d);
+      });
+      setSignedDocsMap(map);
+    } catch (err) {
+      console.error('Error fetching signed documents:', err);
+      setDocsError(err instanceof Error ? err.message : 'Failed to load signed documents');
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPolicies();
+    fetchSignedDocuments();
   }, []);
 
   useEffect(() => {
@@ -710,6 +742,175 @@ export default function Policies() {
                         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                           <File className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                           <p className="text-gray-600">No documents uploaded yet</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Signed Documents from Skribble/Express */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
+                        <FileText className="h-5 w-5 mr-2" />
+                        Document Status
+                      </h4>
+
+                      {docsLoading && <p className="text-sm text-gray-600">Loading documents...</p>}
+                      {docsError && <p className="text-sm text-red-600">{docsError}</p>}
+
+                      {((signedDocsMap[String(policy.userId)] || []).length === 0) ? (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                          <AlertCircle className="h-8 w-8 text-blue-400 mx-auto mb-2" />
+                          <p className="text-blue-900 font-medium">No documents yet</p>
+                          <p className="text-blue-700 text-sm">Waiting for user to initiate document signing</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {(signedDocsMap[String(policy.userId)] || []).map((doc: any, idx: number) => {
+                            // Application Document Status
+                            const appSigned = !!doc.pdfPath && doc.status === 'signed';
+                            const appPending = doc.signingUrl && !doc.pdfPath;
+                            const appDate = doc.updatedAt ? new Date(doc.updatedAt).toLocaleString('de-CH') : (doc.createdAt ? new Date(doc.createdAt).toLocaleString('de-CH') : 'N/A');
+                            
+                            // Cancellation Document Status
+                            const cancellationSigned = !!doc.cancellationPdfPath && doc.cancellationStatus === 'signed';
+                            const cancellationPending = doc.cancellationSigningUrl && !doc.cancellationPdfPath;
+                            const cancellationDate = doc.updatedAt ? new Date(doc.updatedAt).toLocaleString('de-CH') : (doc.createdAt ? new Date(doc.createdAt).toLocaleString('de-CH') : 'N/A');
+                            
+                            return (
+                              <div key={doc.documentId || doc._id || `doc-${idx}`} className="space-y-2">
+                                {/* Application Document */}
+                                <div
+                                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                                    appSigned
+                                      ? 'bg-green-50 border-green-200'
+                                      : appPending
+                                      ? 'bg-yellow-50 border-yellow-200'
+                                      : 'bg-gray-50 border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                    <div>
+                                      {appSigned ? (
+                                        <CheckCircle className="h-5 w-5 text-green-600" />
+                                      ) : appPending ? (
+                                        <Clock className="h-5 w-5 text-yellow-600" />
+                                      ) : (
+                                        <FileText className="h-5 w-5 text-gray-400" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center space-x-2">
+                                        <p className={`text-sm font-medium ${
+                                          appSigned ? 'text-green-900' : appPending ? 'text-yellow-900' : 'text-gray-700'
+                                        }`}>
+                                          {appSigned ? '✓ Application Signed' : appPending ? '⏳ Application Pending' : 'Application Processing'}
+                                        </p>
+                                        {doc.documentType && (
+                                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded">
+                                            {doc.documentType}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-gray-600">{appDate}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2 ml-3">
+                                    {appSigned && doc.pdfPath && (
+                                      <button
+                                        onClick={() => {
+                                          const a = document.createElement('a');
+                                          a.href = doc.pdfPath;
+                                          a.download = `application-${doc.documentId || doc._id}.pdf`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                        }}
+                                        className="px-3 py-1 text-xs text-green-700 bg-green-100 hover:bg-green-200 rounded transition-colors flex items-center space-x-1"
+                                        title="Download signed application"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        <span>Download</span>
+                                      </button>
+                                    )}
+                                    {appPending && doc.signingUrl && (
+                                      <button
+                                        onClick={() => window.open(doc.signingUrl, '_blank')}
+                                        className="px-3 py-1 text-xs text-yellow-700 bg-yellow-100 hover:bg-yellow-200 rounded transition-colors flex items-center space-x-1"
+                                        title="Sign application"
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                        <span>Sign</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Cancellation Document */}
+                                <div
+                                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                                    cancellationSigned
+                                      ? 'bg-green-50 border-green-200'
+                                      : cancellationPending
+                                      ? 'bg-yellow-50 border-yellow-200'
+                                      : 'bg-gray-50 border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                    <div>
+                                      {cancellationSigned ? (
+                                        <CheckCircle className="h-5 w-5 text-green-600" />
+                                      ) : cancellationPending ? (
+                                        <Clock className="h-5 w-5 text-yellow-600" />
+                                      ) : (
+                                        <FileText className="h-5 w-5 text-gray-400" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center space-x-2">
+                                        <p className={`text-sm font-medium ${
+                                          cancellationSigned ? 'text-green-900' : cancellationPending ? 'text-yellow-900' : 'text-gray-700'
+                                        }`}>
+                                          {cancellationSigned ? '✓ Cancellation Signed' : cancellationPending ? '⏳ Cancellation Pending' : 'Cancellation Processing'}
+                                        </p>
+                                        <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded">
+                                          Cancellation
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-600">{cancellationDate}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2 ml-3">
+                                    {cancellationSigned && doc.cancellationPdfPath && (
+                                      <button
+                                        onClick={() => {
+                                          const a = document.createElement('a');
+                                          a.href = doc.cancellationPdfPath;
+                                          a.download = `cancellation-${doc.cancellationDocumentId || doc._id}.pdf`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                        }}
+                                        className="px-3 py-1 text-xs text-green-700 bg-green-100 hover:bg-green-200 rounded transition-colors flex items-center space-x-1"
+                                        title="Download signed cancellation"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        <span>Download</span>
+                                      </button>
+                                    )}
+                                    {cancellationPending && doc.cancellationSigningUrl && (
+                                      <button
+                                        onClick={() => window.open(doc.cancellationSigningUrl, '_blank')}
+                                        className="px-3 py-1 text-xs text-yellow-700 bg-yellow-100 hover:bg-yellow-200 rounded transition-colors flex items-center space-x-1"
+                                        title="Sign cancellation"
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                        <span>Sign</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
