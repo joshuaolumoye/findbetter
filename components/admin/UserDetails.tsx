@@ -57,7 +57,7 @@ export default function UserDetails({ user, onBack }: UserDetailsProps) {
   const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
 
   // Signed documents from Express (Skribble)
-  const EXPRESS_BASE = (process.env.NEXT_PUBLIC_EXPRESS_BASE_URL as string) || 'http://localhost:3001';
+  const EXPRESS_BASE = (process.env.NEXT_PUBLIC_EXPRESS_BASE_URL as string) || 'https://findbetter.ch';
   const [signedDocuments, setSignedDocuments] = useState<any[]>([]);
   const [signedDocsLoading, setSignedDocsLoading] = useState(false);
   const [signedDocsError, setSignedDocsError] = useState('');

@@ -218,7 +218,7 @@ export default function Policies() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Signed documents fetched from the Express server (Skribble results)
-  const EXPRESS_BASE = (process.env.NEXT_PUBLIC_EXPRESS_BASE_URL as string) || 'http://localhost:3001';
+  const EXPRESS_BASE = (process.env.NEXT_PUBLIC_EXPRESS_BASE_URL as string) || 'https://findbetter.ch';
   const [signedDocsMap, setSignedDocsMap] = useState<Record<string, any>>({});
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState('');
