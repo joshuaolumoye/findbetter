@@ -95,7 +95,8 @@ export async function POST(request: NextRequest) {
       insuranceStartDate: body.insuranceStartDate || '01.01.2025',
       idDocumentPath: body.idDocument ? await saveBase64File(body.idDocument, body.email) : null,
       interestedInConsultation: Boolean(body.interestedInConsultation),
-      
+      referralId: body.referralId ? parseInt(body.referralId) : null, // ✅ REFERRAL ID
+
       searchCriteria: {
         postalCode: body.searchCriteria?.postalCode || body.postalCode,
         birthDate: body.searchCriteria?.birthDate || body.birthDate,
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
         currentInsurer: body.searchCriteria?.currentInsurer || 'Unknown',
         newToSwitzerland: Boolean(body.searchCriteria?.newToSwitzerland || false)
       },
-      
+
       selectedInsurance: {
         insurer: body.selectedInsurance.insurer,
         tariffName: body.selectedInsurance.tariffName || 'Standard',
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
         region: body.selectedInsurance.region || 'CH',
         fiscalYear: String(body.selectedInsurance.fiscalYear || '2025')
       },
-      
+
       compliance: {
         informationArt45: Boolean(body.compliance?.informationArt45 || body.informationArt45),
         agbAccepted: Boolean(body.compliance?.agbAccepted || body.agbAccepted),

@@ -9,6 +9,7 @@ import Dashboard from '../../../components/admin/Dashboard';
 import Analytics from '../../../components/admin/Analytics';
 import Policies from '../../../components/admin/Policies';
 import Notifications from '../../../components/admin/Notifications';
+import Referrals from '../../../components/admin/Referrals';
 
 interface User {
   id: number;
@@ -90,7 +91,10 @@ export default function AdminPage() {
       
       case 'policies':
         return <Policies />;
-      
+
+      case 'referrals':
+        return <Referrals />;
+
       case 'claims':
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -98,7 +102,7 @@ export default function AdminPage() {
             <p className="text-gray-600">This section is under development</p>
           </div>
         );
-      
+
       case 'notifications':
         return <Notifications />;
       

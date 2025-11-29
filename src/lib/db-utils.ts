@@ -23,6 +23,7 @@ export interface UserInsuranceData {
   insuranceStartDate?: string;
   idDocumentPath?: string;
   interestedInConsultation: boolean;
+  referralId?: number | null; // ✅ REFERRAL ID for tracking
   
   // Search criteria
   searchCriteria: {
@@ -144,9 +145,9 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
         salutation, first_name, last_name, email, phone, birth_date,
         address, street, postal_code, city, canton, nationality, ahv_number,
         current_insurance_policy_number, old_insurer, insurance_start_date,
-        id_document_path, interested_in_consultation, status, 
+        id_document_path, interested_in_consultation, referral_id, status,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
       [
         data.salutation,
         data.firstName.trim(),
@@ -165,17 +166,18 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
         data.oldInsurer?.trim() || null, // ✅ OLD_INSURER FIELD NOW INCLUDED
         data.insuranceStartDate || '2025-01-01',
         data.idDocumentPath || null,
-        data.interestedInConsultation
+        data.interestedInConsultation,
+        data.referralId || null // ✅ REFERRAL_ID FIELD
       ]
     );
-    
+
     const userId = userResult.insertId;
-    
+
     if (!userId) {
       throw new Error('Failed to create user - no ID returned');
     }
-    
-    console.log('✅ User created with ID:', userId, 'Street:', data.street, 'Old Insurer:', data.oldInsurer);
+
+    console.log('✅ User created with ID:', userId, 'Street:', data.street, 'Old Insurer:', data.oldInsurer, 'Referral ID:', data.referralId);
     
     // Step 3: Insert insurance quote with calculated savings
     const annualSavings = calculateAnnualSavings(data.selectedInsurance.premium);

@@ -46,6 +46,7 @@ const InsuranceSelectionPopup = ({
     mandateAccepted: false,
     terminationAuthority: false,
     consultationInterest: false,
+    referralCode: "", // ✅ REFERRAL CODE FIELD
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +57,9 @@ const InsuranceSelectionPopup = ({
   const [documents, setDocuments] = useState([]);
   const [documentError, setDocumentError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [referralValidating, setReferralValidating] = useState(false);
+  const [referralValid, setReferralValid] = useState<boolean | null>(null);
+  const [referralId, setReferralId] = useState<number | null>(null);
 
   // Function to handle document download
   const handleDownload = async (document) => {
@@ -80,7 +84,7 @@ const InsuranceSelectionPopup = ({
   };
 
   useEffect(() => {
-    const updates = {};
+    const updates: any = {};
 
     if (searchCriteria?.newToSwitzerland && searchCriteria?.entryDate) {
       updates.insuranceStartDate = searchCriteria.entryDate;
@@ -99,6 +103,19 @@ const InsuranceSelectionPopup = ({
       updates.oldInsurer = searchCriteria.aktuelleKKName;
     } else if (searchCriteria?.newToSwitzerland) {
       updates.oldInsurer = ""; // Clear for new-to-Switzerland users
+    }
+
+    // ✅ Load referral code from sessionStorage (set when user visits /referral/[code])
+    if (typeof window !== 'undefined') {
+      const storedReferralCode = sessionStorage.getItem('referralCode');
+      const storedReferralId = sessionStorage.getItem('referralId');
+      if (storedReferralCode) {
+        updates.referralCode = storedReferralCode;
+        setReferralValid(true);
+        if (storedReferralId) {
+          setReferralId(parseInt(storedReferralId));
+        }
+      }
     }
 
     setFormData((prev) => ({ ...prev, ...updates }));
@@ -171,6 +188,40 @@ const InsuranceSelectionPopup = ({
     return Object.keys(errors).length === 0;
   };
 
+  // ✅ Validate referral code when user types it manually
+  const validateReferralCode = async (code: string) => {
+    if (!code.trim()) {
+      setReferralValid(null);
+      setReferralId(null);
+      return;
+    }
+
+    setReferralValidating(true);
+    try {
+      const response = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code.trim())}`);
+      const data = await response.json();
+
+      if (data.valid) {
+        setReferralValid(true);
+        setReferralId(data.referral.id);
+        // Store in sessionStorage for persistence
+        sessionStorage.setItem('referralCode', code.trim());
+        sessionStorage.setItem('referralId', data.referral.id.toString());
+      } else {
+        setReferralValid(false);
+        setReferralId(null);
+        sessionStorage.removeItem('referralCode');
+        sessionStorage.removeItem('referralId');
+      }
+    } catch (error) {
+      console.error('Error validating referral:', error);
+      setReferralValid(false);
+      setReferralId(null);
+    } finally {
+      setReferralValidating(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { id, value, type } = e.target;
     const checked = e.target.checked;
@@ -179,6 +230,15 @@ const InsuranceSelectionPopup = ({
       ...prev,
       [id]: type === "checkbox" ? checked : value,
     }));
+
+    // ✅ Validate referral code on blur or after typing stops
+    if (id === "referralCode") {
+      // Debounce validation
+      const timeoutId = setTimeout(() => {
+        validateReferralCode(value);
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
 
     if (validationErrors[id]) {
       setValidationErrors((prev) => ({ ...prev, [id]: "" }));
@@ -282,6 +342,10 @@ const handleSubmit = async (e) => {
         region: selectedInsurance?.Region || "CH",
         fiscalYear: String(selectedInsurance?.["Fiscal year"] || "2025"),
       },
+
+      // ✅ Referral tracking
+      referralId: referralValid && referralId ? referralId : null,
+      referralCode: referralValid && formData.referralCode ? formData.referralCode.trim() : null,
 
       compliance: {
         informationArt45: formData.informationArt45,
@@ -486,11 +550,17 @@ const handleSubmit = async (e) => {
         mandateAccepted: false,
         terminationAuthority: false,
         consultationInterest: false,
+        referralCode: "", // ✅ Reset referral code
       });
       setSubmitSuccess(false);
       setValidationErrors({});
       setSubmitError("");
       setCurrentStep("form");
+      // ✅ Clear referral state
+      setReferralValid(null);
+      setReferralId(null);
+      sessionStorage.removeItem('referralCode');
+      sessionStorage.removeItem('referralId');
     }
     onClose();
   };
@@ -919,22 +989,74 @@ const handleSubmit = async (e) => {
                       )}
                     </div>
                   </div>
-                  {/* Nationality */}
-                  <div className="w-full lg:w-1/2 lg:pr-4">
-                    <label
-                      htmlFor="nationality"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Staatsangehörigkeit
-                    </label>
-                    <input
-                      type="text"
-                      id="nationality"
-                      value={formData.nationality}
-                      onChange={handleInputChange}
-                      placeholder="z.B. Schweiz, Deutschland"
-                      className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder:text-gray-400 transition-colors"
-                    />
+                  {/* Nationality & Referral Code */}
+                  <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+                    <div className="w-full lg:w-1/2">
+                      <label
+                        htmlFor="nationality"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Staatsangehörigkeit
+                      </label>
+                      <input
+                        type="text"
+                        id="nationality"
+                        value={formData.nationality}
+                        onChange={handleInputChange}
+                        placeholder="z.B. Schweiz, Deutschland"
+                        className="w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder:text-gray-400 transition-colors"
+                      />
+                    </div>
+
+                    <div className="w-full lg:w-1/2">
+                      <label
+                        htmlFor="referralCode"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Empfehlungscode (optional)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          id="referralCode"
+                          value={formData.referralCode}
+                          onChange={handleInputChange}
+                          placeholder="z.B. PARTNER2024"
+                          className={`w-full bg-gray-100 border-0 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:bg-white placeholder:text-gray-400 transition-colors pr-10 ${
+                            referralValid === true
+                              ? "ring-2 ring-green-500 bg-green-50"
+                              : referralValid === false
+                              ? "ring-2 ring-red-500 bg-red-50"
+                              : "focus:ring-blue-500"
+                          }`}
+                        />
+                        {referralValidating && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <div className="h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        )}
+                        {!referralValidating && referralValid === true && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600">
+                            <CheckCircle className="h-5 w-5" />
+                          </div>
+                        )}
+                        {!referralValidating && referralValid === false && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-red-600">
+                            <AlertCircle className="h-5 w-5" />
+                          </div>
+                        )}
+                      </div>
+                      {referralValid === true && (
+                        <p className="mt-1 text-xs text-green-600">
+                          ✓ Gültiger Empfehlungscode
+                        </p>
+                      )}
+                      {referralValid === false && (
+                        <p className="mt-1 text-xs text-red-600">
+                          Ungültiger Empfehlungscode
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
