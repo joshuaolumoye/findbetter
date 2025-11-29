@@ -23,6 +23,8 @@ interface UserData {
   postal_code?: string;
   selected_insurer?: string;
   name?: string;
+  referral_code?: string;
+  referral_name?: string;
 }
 
 interface DashboardStats {
@@ -117,6 +119,16 @@ function UserCard({
             <span>{user.canton}</span>
           </div>
         )}
+
+        {/* Referral Code */}
+        <div className="flex items-center text-sm">
+          <span className="w-4 h-4 mr-2">🔗</span>
+          {user.referral_code ? (
+            <span className="text-green-600 font-medium">{user.referral_code}</span>
+          ) : (
+            <span className="text-gray-400 italic">Kein Empfehlungscode</span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 pt-4 border-t border-gray-100">

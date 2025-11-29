@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  ArrowLeft, User, Mail, Phone, Calendar, MapPin, 
-  FileText, DollarSign, AlertCircle, CheckCircle, 
+import {
+  ArrowLeft, User, Mail, Phone, Calendar, MapPin,
+  FileText, DollarSign, AlertCircle, CheckCircle,
   Edit, Save, X, Shield, Download, File, Image as ImageIcon,
-  ExternalLink, Loader
+  ExternalLink, Loader, Link2
 } from 'lucide-react';
 
 interface UserData {
@@ -31,6 +31,9 @@ interface UserData {
   city?: string;
   nationality?: string;
   ahv_number?: string;
+  referral_code?: string;
+  referral_name?: string;
+  referral_id?: number;
 }
 
 interface UserDocument {
@@ -368,6 +371,20 @@ export default function UserDetails({ user, onBack }: UserDetailsProps) {
                   {displayUser.canton}, Schweiz
                 </div>
               )}
+              <div className="flex items-center">
+                <Link2 className="h-4 w-4 mr-2" />
+                <span className="font-medium mr-1">Empfehlungscode:</span>
+                {displayUser.referral_code ? (
+                  <span className="text-green-600 font-medium">
+                    {displayUser.referral_code}
+                    {displayUser.referral_name && (
+                      <span className="text-gray-500 ml-1">({displayUser.referral_name})</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-gray-400 italic">Kein Empfehlungscode</span>
+                )}
+              </div>
             </div>
           </div>
         </div>

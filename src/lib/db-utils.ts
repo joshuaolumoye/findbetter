@@ -295,27 +295,29 @@ export async function createUserWithInsurance(data: UserInsuranceData): Promise<
 export async function getAllUsers(): Promise<DatabaseUser[]> {
   try {
     console.log('PRODUCTION: Fetching all users...');
-    
+
     const [rows] = await Promise.race([
       pool.execute<DatabaseUser[]>(
-        `SELECT 
+        `SELECT
           u.id, u.status,
           CONCAT(u.first_name, ' ', u.last_name) as full_name,
           u.email, u.phone, u.birth_date, u.postal_code, u.canton,
           u.created_at as join_date,
           iq.selected_insurer, iq.selected_premium, iq.annual_savings, iq.quote_status,
-          CASE WHEN uc.id IS NOT NULL THEN 'Complete' ELSE 'Incomplete' END as compliance_status
+          CASE WHEN uc.id IS NOT NULL THEN 'Complete' ELSE 'Incomplete' END as compliance_status,
+          r.code as referral_code, r.name as referral_name
         FROM users u
         LEFT JOIN insurance_quotes iq ON u.id = iq.user_id
         LEFT JOIN user_compliance uc ON u.id = uc.user_id
-        ORDER BY u.created_at DESC 
+        LEFT JOIN referrals r ON u.referral_id = r.id
+        ORDER BY u.created_at DESC
         LIMIT 1000`
       ),
-      new Promise<never>((_, reject) => 
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 15000)
       )
     ]) as [DatabaseUser[], any];
-    
+
     console.log(`PRODUCTION: Retrieved ${rows.length} users`);
     return rows;
   } catch (error) {
@@ -344,10 +346,13 @@ export async function getUserDetails(userId: number): Promise<{
     
     const [userRows] = await Promise.race([
       connection.execute<DetailedUser[]>(
-        'SELECT * FROM users WHERE id = ? LIMIT 1',
+        `SELECT u.*, r.code as referral_code, r.name as referral_name
+         FROM users u
+         LEFT JOIN referrals r ON u.referral_id = r.id
+         WHERE u.id = ? LIMIT 1`,
         [userId]
       ),
-      new Promise<never>((_, reject) => 
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('User query timeout')), 10000)
       )
     ]) as [DetailedUser[], any];
@@ -535,11 +540,13 @@ export async function getUsersByStatus(status: string): Promise<DatabaseUser[]> 
     `SELECT u.id, u.status, CONCAT(u.first_name, ' ', u.last_name) as full_name,
       u.email, u.phone, u.birth_date, u.postal_code, u.canton, u.created_at as join_date,
       iq.selected_insurer, iq.selected_premium, iq.annual_savings, iq.quote_status,
-      CASE WHEN uc.id IS NOT NULL THEN 'Complete' ELSE 'Incomplete' END as compliance_status
+      CASE WHEN uc.id IS NOT NULL THEN 'Complete' ELSE 'Incomplete' END as compliance_status,
+      r.code as referral_code, r.name as referral_name
     FROM users u
     LEFT JOIN insurance_quotes iq ON u.id = iq.user_id
     LEFT JOIN user_compliance uc ON u.id = uc.user_id
-    WHERE u.status = ? 
+    LEFT JOIN referrals r ON u.referral_id = r.id
+    WHERE u.status = ?
     ORDER BY u.created_at DESC LIMIT 500`,
     [status]
   );
