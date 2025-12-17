@@ -1,7 +1,7 @@
 // File: src/lib/auth.ts
 
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import pool from './database';
 import { RowDataPacket } from 'mysql2';
@@ -21,8 +21,8 @@ export interface SessionData {
   role: string;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const JWT_SECRET: string = process.env.JWT_SECRET!;
+const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '24h';
 const BCRYPT_SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12');
 
 // Hash password
@@ -32,12 +32,18 @@ export async function hashPassword(password: string): Promise<string> {
 
 // Verify password
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return await bcrypt.compare(password, hash);
+  // Support PHP-style $2y$ bcrypt hashes by normalizing to $2a$
+  let normalizedHash = hash;
+  if (hash && hash.startsWith('$2y$')) {
+    normalizedHash = '$2a$' + hash.slice(4);
+  }
+  return await bcrypt.compare(password, normalizedHash);
 }
 
 // Generate JWT token
 export function generateToken(payload: SessionData): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  // Ensure expiresIn is passed as an option, not as a callback
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as SignOptions);
 }
 
 // Verify JWT token
@@ -183,9 +189,39 @@ export async function destroySession(sessionToken: string): Promise<void> {
 
 // Get current session from cookies
 export async function getCurrentSession(): Promise<Admin | null> {
-  const cookieStore = cookies();
-  const sessionToken = cookieStore.get('admin_session')?.value;
-  return await validateSession(sessionToken);
+  try {
+    const cookieStore = cookies();
+
+    // Be defensive: different runtimes may expose cookies in different shapes
+    let sessionToken: string | undefined;
+
+    if (cookieStore && typeof (cookieStore as any).get === 'function') {
+      sessionToken = (cookieStore as any).get('admin_session')?.value;
+    } else if (cookieStore && typeof (cookieStore as any).getAll === 'function') {
+      const all = (cookieStore as any).getAll();
+      const found = Array.isArray(all) ? all.find((c: any) => c.name === 'admin_session') : undefined;
+      sessionToken = found?.value;
+    } else if (cookieStore && typeof cookieStore === 'object' && 'admin_session' in (cookieStore as any)) {
+      const v = (cookieStore as any)['admin_session'];
+      sessionToken = typeof v === 'object' ? v?.value : v;
+    } else {
+      // Last resort: try to parse cookie header string (if available)
+      try {
+        const raw = (cookieStore as any).toString?.();
+        if (typeof raw === 'string') {
+          const match = raw.match(/admin_session=([^;\s]+)/);
+          sessionToken = match ? decodeURIComponent(match[1]) : undefined;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return await validateSession(sessionToken);
+  } catch (error) {
+    console.error('getCurrentSession error:', error);
+    return null;
+  }
 }
 
 // Clean up expired sessions (run this periodically)

@@ -45,9 +45,11 @@ export default function AdminPage() {
           setAuthChecked(true);
         } else {
           console.log('Auth failed, redirecting to login');
-          if (response.status === 401) {
-            router.replace('/admin/login');
-          }
+        // Mark that auth check finished so UI shows redirecting state, then navigate
+        setAuthChecked(true);
+        if (response.status === 401) {
+          router.replace('/admin/login');
+        }
         }
       } catch (error) {
         console.error('Auth check failed:', error);

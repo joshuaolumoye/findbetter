@@ -1,17 +1,20 @@
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentSession } from '@/lib/auth';
+import { validateSession } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const admin = await getCurrentSession();
-    
+    // Get session token from request cookies
+    const sessionToken = request.cookies.get('admin_session')?.value;
+    const admin = await validateSession(sessionToken);
+
     if (!admin) {
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
       );
     }
-    
+
     return NextResponse.json({
       success: true,
       admin: {
@@ -21,9 +24,11 @@ export async function GET(request: NextRequest) {
         role: admin.role
       }
     });
-    
   } catch (error) {
-    console.error('Session verification error:', error);
+    // Log a bit more context (avoid spamming full cookies)
+    console.error('Session verification error:', error, {
+      cookieHeader: request.headers.get('cookie')?.slice(0, 200) ?? null,
+    });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

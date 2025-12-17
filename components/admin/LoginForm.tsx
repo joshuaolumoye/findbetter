@@ -19,19 +19,22 @@ export default function LoginForm() {
     setError('');
     
     try {
+      // Normalize email and include credentials so the Set-Cookie is accepted by the browser
+      const normalizedEmail = String(email || '').trim().toLowerCase();
       const response = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
       
       const data = await response.json();
       
       if (response.ok) {
-        // Redirect to admin dashboard
-        router.push('/admin');
+        // Redirect to admin dashboard (replace to avoid push history issues)
+        router.replace('/admin');
         router.refresh(); // Refresh to update middleware
       } else {
         setError(data.error || 'Login failed');
