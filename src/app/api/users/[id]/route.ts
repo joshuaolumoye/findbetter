@@ -6,13 +6,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  context: any
+  { params }: { params: { id: string } }
 ) {
-  console.log('Fetching user details for ID:', context.params.id);
-  
+  console.log('Fetching user details for ID:', params.id);
   try {
-    const userId = parseInt(context.params.id);
-    
+    const userId = parseInt(params.id);
     if (isNaN(userId) || userId <= 0) {
       return NextResponse.json(
         { 
@@ -23,7 +21,6 @@ export async function GET(
         { status: 400 }
       );
     }
-
     // Get user details with timeout protection
     const userDetails = await Promise.race([
       getUserDetails(userId),
@@ -31,7 +28,6 @@ export async function GET(
         setTimeout(() => reject(new Error('Database query timeout')), 15000)
       )
     ]);
-
     if (!userDetails.user) {
       return NextResponse.json(
         { 
@@ -42,9 +38,7 @@ export async function GET(
         { status: 404 }
       );
     }
-
     console.log('User details fetched successfully for:', userDetails.user.email);
-
     return NextResponse.json({
       success: true,
       user: userDetails.user,
@@ -52,10 +46,8 @@ export async function GET(
       compliance: userDetails.compliance,
       adminActions: userDetails.adminActions
     });
-
   } catch (error: any) {
     console.error('Error fetching user details:', error);
-    
     if (error.message.includes('timeout')) {
       return NextResponse.json(
         { 
@@ -66,7 +58,6 @@ export async function GET(
         { status: 408 }
       );
     }
-    
     return NextResponse.json(
       { 
         error: 'Failed to fetch user details',
