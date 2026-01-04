@@ -1,4 +1,4 @@
-// File: src/lib/auth.ts
+// File: src/lib/auth.tss
 
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
