@@ -1,6 +1,6 @@
 // File: src/lib/auth.ts
 
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import pool from './database';
@@ -25,19 +25,14 @@ const JWT_SECRET: string = process.env.JWT_SECRET!;
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '24h';
 const BCRYPT_SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12');
 
-// Hash password
+// Hash password using native bcrypt
 export async function hashPassword(password: string): Promise<string> {
   return await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
-// Verify password
+// Verify password using native bcrypt (no normalization)
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  // Support PHP-style $2y$ and $2b$ bcrypt hashes by normalizing to $2a$
-  let normalizedHash = hash;
-  if (hash && (hash.startsWith('$2y$') || hash.startsWith('$2b$'))) {
-    normalizedHash = '$2a$' + hash.slice(4);
-  }
-  return await bcrypt.compare(password, normalizedHash);
+  return await bcrypt.compare(password, hash);
 }
 
 // Generate JWT token
@@ -62,9 +57,7 @@ export async function findAdminByEmail(email: string): Promise<Admin | null> {
       'SELECT id, email, password_hash, name, role, is_active FROM admins WHERE email = ? AND is_active = TRUE',
       [email]
     );
-    
     if (rows.length === 0) return null;
-    
     const row = rows[0];
     return {
       id: row.id,
@@ -86,20 +79,15 @@ export async function authenticateAdmin(email: string, password: string): Promis
       'SELECT id, email, password_hash, name, role, is_active FROM admins WHERE email = ? AND is_active = TRUE',
       [email]
     );
-    
     if (rows.length === 0) return null;
-    
     const admin = rows[0];
     const isValidPassword = await verifyPassword(password, admin.password_hash);
-    
     if (!isValidPassword) return null;
-    
     // Update last login
     await pool.execute(
       'UPDATE admins SET last_login = NOW() WHERE id = ?',
       [admin.id]
     );
-    
     return {
       id: admin.id,
       email: admin.email,

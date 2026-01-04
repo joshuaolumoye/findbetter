@@ -12,6 +12,7 @@
     "@headlessui/react": "^2.2.7",
     "@sentry/nextjs": "^10.32.1",
     "@types/uuid": "^10.0.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "form-data": "^4.0.4",
     "i": "^0.3.7",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/form-data": "^2.2.1",
     "@types/jsonwebtoken": "^9.0.10",
