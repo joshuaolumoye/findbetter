@@ -32,9 +32,9 @@ export async function hashPassword(password: string): Promise<string> {
 
 // Verify password
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  // Support PHP-style $2y$ bcrypt hashes by normalizing to $2a$
+  // Support PHP-style $2y$ and $2b$ bcrypt hashes by normalizing to $2a$
   let normalizedHash = hash;
-  if (hash && hash.startsWith('$2y$')) {
+  if (hash && (hash.startsWith('$2y$') || hash.startsWith('$2b$'))) {
     normalizedHash = '$2a$' + hash.slice(4);
   }
   return await bcrypt.compare(password, normalizedHash);

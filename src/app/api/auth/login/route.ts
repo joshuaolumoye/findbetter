@@ -45,15 +45,25 @@ export async function POST(request: NextRequest) {
     });
     
     // Set secure cookie
+    // NOTE: On VPS, ensure you use HTTPS for secure cookies. If testing on HTTP, set secure: false.
     response.cookies.set('admin_session', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production', // Set to false if not using HTTPS
       sameSite: 'lax',
       maxAge: 24 * 60 * 60, // 24 hours
       path: '/'
     });
     
     return response;
+
+    // VPS Checklist:
+    // 1. .env.local must have correct DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, JWT_EXPIRES_IN
+    // 2. DB user must have SELECT on admins table
+    // 3. VPS system time must be correct (check with 'date')
+    // 4. Node version should be >= 16
+    // 5. If using HTTP (not HTTPS), set secure: false for cookies
+    // 6. Make sure bcrypt is installed and works (try hashing and comparing a password in a Node REPL)
+    // 7. Check logs for any errors in /var/log or your process manager (pm2, systemd, etc)
     
   } catch (error) {
     console.error('Login error:', error);
